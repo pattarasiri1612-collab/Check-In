@@ -53,6 +53,13 @@
   .cam { position: relative; aspect-ratio: 3 / 4; background: #0e1520; border-radius: 12px; overflow: hidden; }
   .cam video, .cam img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .cam video { transform: scaleX(-1); }
+  /* ฟิลเตอร์ขาวใสเนียน (พรีวิว) — ตอนถ่ายจริงใช้สูตรเดียวกันบน canvas */
+  .cam.beauty #video { filter: brightness(1.1) contrast(0.94) saturate(1.05); }
+  .cam #videoSoft { position: absolute; inset: 0; filter: blur(8px) brightness(1.1); opacity: .35; pointer-events: none; }
+  .cam .tint { position: absolute; inset: 0; background: rgba(255, 238, 232, .14); mix-blend-mode: screen; pointer-events: none; }
+  .beautyBar { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+  .beautyBtn { padding: 6px 14px; border-radius: 999px; font-size: 14px; background: #eef1f5; border: none; color: var(--muted); }
+  .beautyBtn.on { background: #fde7ef; color: #b0306a; }
   .camMsg { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; color: #cbd5e1; padding: 24px; font-size: 15px; }
   .row { display: flex; gap: 8px; margin-top: 10px; } .row > * { flex: 1; }
   .hidden { display: none !important; }
@@ -147,8 +154,11 @@
     <div class="card">
       <h3><span class="num">4</span> ถ่ายเซลฟี่ (กล้องสดเท่านั้น)</h3>
       <div class="challenge">ในรูปให้ <b id="gesture"></b> &nbsp;·&nbsp; รหัส <b id="chCode"></b></div>
-      <div class="cam">
+      <div class="beautyBar"><button id="btnBeauty" class="beautyBtn">✨ ขาวใสเนียน</button></div>
+      <div class="cam" id="camBox">
         <video id="video" playsinline muted autoplay class="hidden"></video>
+        <video id="videoSoft" playsinline muted autoplay class="hidden"></video>
+        <div id="tint" class="tint hidden"></div>
         <img id="shot" class="hidden" alt="เซลฟี่ที่ถ่าย">
         <div class="camMsg" id="camMsg">กดปุ่ม “เปิดกล้อง” แล้วอนุญาตให้ใช้กล้อง</div>
       </div>
@@ -495,7 +505,10 @@ async function openCamera() {
     state.camLabel = (track && track.label) || '';
     const v = $('video');
     v.srcObject = s; v.classList.remove('hidden');
+    $('videoSoft').srcObject = s;
     await v.play().catch(() => {});
+    $('videoSoft').play().catch(() => {});
+    applyBeauty();
     msg.classList.add('hidden'); $('shot').classList.add('hidden');
     $('btnCam').classList.add('hidden'); $('btnSnap').classList.remove('hidden'); $('btnRetake').classList.add('hidden');
   } catch (e) {
@@ -508,6 +521,30 @@ function stopCamera() {
   if (state.stream) state.stream.getTracks().forEach((t) => t.stop());
   state.stream = null;
   $('video').srcObject = null;
+  $('videoSoft').srcObject = null;
+  $('videoSoft').classList.add('hidden'); $('tint').classList.add('hidden');
+}
+/* ฟิลเตอร์ขาวใสเนียน: เปิด/ปิดได้ จำค่าไว้ในเครื่อง */
+function applyBeauty() {
+  const on = state.beauty, live = !!state.stream && !$('video').classList.contains('hidden');
+  $('camBox').classList.toggle('beauty', on);
+  $('btnBeauty').classList.toggle('on', on);
+  $('btnBeauty').textContent = on ? '✨ ขาวใสเนียน: เปิด' : '✨ ขาวใสเนียน: ปิด';
+  $('videoSoft').classList.toggle('hidden', !(on && live));
+  $('tint').classList.toggle('hidden', !(on && live));
+}
+function beautify(ctx, src, w, h) {
+  // 1) ผิวเนียน: ซ้อนภาพเบลอ (ย่อแล้วขยาย) แบบโปร่ง 35%
+  const sm = document.createElement('canvas');
+  sm.width = Math.max(1, Math.round(w / 6)); sm.height = Math.max(1, Math.round(h / 6));
+  sm.getContext('2d').drawImage(src, 0, 0, sm.width, sm.height);
+  ctx.save();
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  ctx.globalAlpha = 0.35; ctx.drawImage(sm, 0, 0, w, h);
+  // 2) ขาวใส: เพิ่มแสงโทนชมพูอ่อนแบบ screen
+  ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'screen';
+  ctx.fillStyle = 'rgba(255, 238, 232, 0.16)'; ctx.fillRect(0, 0, w, h);
+  ctx.restore();
 }
 function snap() {
   const v = $('video');
@@ -517,6 +554,7 @@ function snap() {
   const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
   const ctx = cv.getContext('2d');
   ctx.drawImage(v, 0, 0, w, h);
+  if (state.beauty) beautify(ctx, v, w, h);
 
   // ลายน้ำ: ชื่อ / สาขา / เวลาเซิร์ฟเวอร์ / รหัสยืนยัน
   const d = state.data, br = selectedBranch(), now = serverNow();
@@ -571,7 +609,7 @@ async function submit() {
     type: state.type, branchId: $('selBranch').value, position: state.position,
     location: p ? { lat: p.lat, lng: p.lng, accuracy: p.accuracy, ageMs: Date.now() - p.at } : null,
     photo: state.photo, challengeCode: state.data.challenge.code, clientTime: Date.now(),
-    camera: { source: 'live', label: state.camLabel },
+    camera: { source: 'live', label: state.camLabel, filter: state.beauty ? 'beauty' : 'none' },
   };
   try {
     const r = await api('checkin', { payload });
@@ -616,6 +654,10 @@ $('inEmail').addEventListener('keydown', (e) => { if (e.key === 'Enter') ($('pwB
 $('btnLogout').onclick = logout;
 $('btnLoc').onclick = startLocation;
 $('btnCam').onclick = openCamera;
+$('btnBeauty').onclick = () => {
+  state.beauty = !state.beauty; store.set('ci_beauty', state.beauty ? '1' : '0'); applyBeauty();
+  if (state.photo) { resetPhoto(); toast('เปลี่ยนฟิลเตอร์แล้ว กรุณาถ่ายรูปใหม่', 'info'); }
+};
 $('btnSnap').onclick = snap;
 $('btnRetake').onclick = () => { resetPhoto(); openCamera(); };
 $('btnSubmit').onclick = submit;
@@ -641,6 +683,8 @@ document.addEventListener('visibilitychange', () => {
 /* ---------- Start ---------- */
 (function init() {
   state.device = detectDevice();
+  state.beauty = store.get('ci_beauty') !== '0';  // ค่าเริ่มต้น: เปิด
+  applyBeauty();
   state.token = store.get('ci_token');
   if (!API_URL) return showLogin('ยังไม่ได้ตั้งค่า API_URL — ผู้ดูแลต้องวาง Web app URL ในไฟล์ Index.html');
   if (state.token) loadMain(); else showLogin();
