@@ -96,6 +96,34 @@
   .kv { text-align: left; margin: 18px 0 0; display: grid; grid-template-columns: auto 1fr; gap: 8px 14px; font-size: 15px; background: #f4faf9; border-radius: 14px; padding: 14px 16px; }
   .kv dt { color: var(--muted); } .kv dd { margin: 0; font-weight: 600; }
   ul.notes { text-align: left; margin: 12px 0 0; padding-left: 20px; color: var(--warn); }
+  .pillBtn { margin-top: 12px; width: 100%; background: var(--brand-soft); border: none; color: var(--brand); border-radius: 14px; }
+  .rowHead { display: flex; justify-content: space-between; align-items: center; }
+  .hist { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; }
+  .hist .d { font-weight: 700; }
+  .hist .t { font-variant-numeric: tabular-nums; }
+  .pill { display: inline-block; font-size: 12px; font-weight: 700; border-radius: 999px; padding: 3px 10px; background: #eef4f3; color: var(--muted); white-space: nowrap; }
+  .pill.ok { background: var(--ok-bg); color: var(--ok); } .pill.late { background: var(--warn-bg); color: var(--warn); }
+  .pill.absent, .pill.missing, .pill.flag { background: var(--err-bg); color: var(--err); } .pill.off { background: #eaf0ff; color: #3949ab; }
+  .pill.in { background: var(--brand-soft); color: var(--brand); } .pill.out { background: #ffe9d6; color: #a14d00; }
+  .tabs { margin-bottom: 14px; } .tabs button { font-size: 14px; padding: 10px 2px; }
+  .badge { display: inline-grid; place-items: center; min-width: 20px; height: 20px; border-radius: 999px; background: var(--err); color: #fff; font-size: 12px; padding: 0 6px; }
+  .filters { padding: 12px; } .frow { display: flex; gap: 8px; } .frow > * { flex: 1; min-width: 0; }
+  .tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
+  .tile { background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 12px 8px; text-align: center; box-shadow: var(--shadow); }
+  .tile b { display: block; font-family: 'Prompt', sans-serif; font-size: 26px; line-height: 1.1; }
+  .tile span { font-size: 12px; color: var(--muted); }
+  .tile.ok b { color: var(--ok); } .tile.late b { color: var(--warn); } .tile.bad b { color: var(--err); } .tile.off b { color: #3949ab; }
+  .item { background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 12px 14px; margin-bottom: 8px; box-shadow: var(--shadow); }
+  .item .top { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+  .item .name { font-weight: 700; } .item .sub { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .item .acts { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; } .item .acts button { padding: 8px 12px; font-size: 14px; border-radius: 12px; }
+  .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 8px; text-align: center; }
+  .grid4 div { background: #f4faf9; border-radius: 10px; padding: 6px 2px; font-size: 12px; color: var(--muted); }
+  .grid4 b { display: block; font-size: 17px; color: var(--ink); }
+  .empty { text-align: center; color: var(--muted); padding: 24px 8px; }
+  .modal { position: fixed; inset: 0; background: rgba(6, 30, 29, .6); z-index: 20; display: grid; place-items: center; padding: 16px; }
+  .modalBox { background: #fff; border-radius: 20px; padding: 14px; width: 100%; max-width: 440px; max-height: 92vh; overflow: auto; }
+  .modalBox img { width: 100%; border-radius: 14px; display: block; margin: 8px 0; }
 </style>
 </head>
 <body>
@@ -134,6 +162,8 @@
       <button id="btnResend" class="link">ส่งรหัสอีกครั้ง</button>
     </div>
     <button id="btnBackPw" class="link hidden">← กลับไปใช้รหัสผ่าน</button>
+    <hr style="border:none;border-top:1px solid var(--line);margin:14px 0 4px">
+    <button id="btnGoMgr" class="link small">👔 สำหรับหัวหน้างาน: เข้าหลังบ้าน →</button>
   </section>
 
   <!-- ตั้งรหัสผ่านใหม่ -->
@@ -155,6 +185,7 @@
         <div><div class="greet" id="greet"></div><b id="whoName"></b><span class="muted small" id="whoEmail"></span></div>
       </div>
       <div class="chips" id="chips"></div>
+      <button id="btnHistory" class="pillBtn">📅 ประวัติการเช็กอินของฉัน</button>
     </div>
 
     <div class="card">
@@ -208,8 +239,74 @@
     <ul class="notes" id="doneNotes"></ul>
     <button id="btnBack" class="full">กลับหน้าหลัก</button>
   </section>
+
+  <!-- เชื่อมต่อไม่สำเร็จ -->
+  <section id="vNet" class="card hidden" style="text-align:center">
+    <div style="font-size:44px">📶</div>
+    <h2>เชื่อมต่อไม่สำเร็จ</h2>
+    <p class="muted" id="netMsg"></p>
+    <p class="small muted">ลองปิด Wi-Fi แล้วใช้เน็ตมือถือ หรือรอสักครู่แล้วกด “ลองใหม่”</p>
+    <button id="btnNetRetry" class="primary full">ลองใหม่</button>
+  </section>
+
+  <!-- ประวัติของฉัน -->
+  <section id="vHistory" class="hidden">
+    <div class="card">
+      <div class="rowHead"><h2>ประวัติของฉัน</h2><button id="btnHistBack" class="link">← กลับ</button></div>
+      <p class="muted small" style="margin:4px 0 0">ย้อนหลัง 30 วัน · เข้างานครั้งแรกและออกงานครั้งสุดท้ายของแต่ละวัน</p>
+    </div>
+    <div id="histList"></div>
+  </section>
+
+  <!-- หัวหน้างาน: เข้าสู่ระบบ -->
+  <section id="vMgrLogin" class="card hidden">
+    <h2>เข้าสู่ระบบหัวหน้างาน</h2>
+    <p class="muted small">ใช้อีเมลและรหัสผ่านที่อยู่ในแท็บ Managers ของ Google Sheet</p>
+    <div id="mgrLoginBox">
+      <label for="inMEmail">อีเมล</label>
+      <input id="inMEmail" type="email" autocomplete="username" inputmode="email">
+      <label for="inMPw">รหัสผ่าน</label>
+      <input id="inMPw" type="password" autocomplete="current-password">
+      <button id="btnMLogin" class="primary full">เข้าสู่ระบบ</button>
+    </div>
+    <div id="mgrSetPwBox" class="hidden">
+      <div class="status warn">เข้าครั้งแรก: กรุณาตั้งรหัสผ่านใหม่ อย่างน้อย 8 ตัวอักษร</div>
+      <label for="inMNew">รหัสผ่านใหม่</label>
+      <input id="inMNew" type="password" autocomplete="new-password">
+      <label for="inMNew2">ยืนยันรหัสผ่านใหม่</label>
+      <input id="inMNew2" type="password" autocomplete="new-password">
+      <button id="btnMSetPw" class="primary full">บันทึกรหัสผ่าน</button>
+    </div>
+    <button id="btnBackStaff" class="link">← กลับไปหน้าเช็กอินพนักงาน</button>
+  </section>
+
+  <!-- หัวหน้างาน: หลังบ้าน -->
+  <section id="vMgr" class="hidden">
+    <div class="card">
+      <div class="who">
+        <div class="avatar">👔</div>
+        <div><div class="greet">หลังบ้านหัวหน้างาน</div><b id="mgrName"></b><span class="muted small" id="mgrRegion"></span></div>
+      </div>
+    </div>
+    <div class="seg tabs" id="mgrTabs">
+      <button data-v="today" class="on">วันนี้</button>
+      <button data-v="checkins">เช็กอิน</button>
+      <button data-v="month">รายเดือน</button>
+      <button data-v="devices">อุปกรณ์ <span id="devBadge" class="badge hidden"></span></button>
+    </div>
+    <div class="card filters">
+      <div class="frow">
+        <input id="mDate" type="date" aria-label="วันที่">
+        <input id="mMonth" type="month" class="hidden" aria-label="เดือน">
+        <select id="mBranch" aria-label="สาขา"></select>
+      </div>
+    </div>
+    <div id="mgrBody"></div>
+    <button id="btnGoStaff" class="link">สลับไปหน้าเช็กอินพนักงาน →</button>
+  </section>
 </div>
 <div id="toast"></div>
+<div id="modal" class="modal hidden"><div class="modalBox"><div class="rowHead"><b id="modalTitle"></b><button id="modalClose" class="link">ปิด ✕</button></div><div id="modalBody"></div></div></div>
 
 <script>
 /* ---------------------------------------------------------------
@@ -225,6 +322,7 @@ const state = {
   token: null, device: null, data: null, offset: 0,
   type: 'in', position: '', pos: null, watchId: null,
   stream: null, camLabel: '', photo: null, photoAt: 0, busy: false,
+  mode: 'staff', mtoken: null, mgr: null, mgrTab: 'today',
 };
 
 /* ---------- storage (localStorage + cookie สำรอง) ---------- */
@@ -270,14 +368,20 @@ function detectDevice() {
 /* ---------- API ---------- */
 async function api(action, data) {
   if (!API_URL) throw new Error('ยังไม่ได้ตั้งค่า API_URL ในไฟล์ Index.html');
-  const body = JSON.stringify(Object.assign({ action, token: state.token, device: state.device }, data || {}));
-  let res;
-  try {
-    res = await fetch(API_URL, { method: 'POST', body, redirect: 'follow' });
-  } catch (e) {
-    throw new Error('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาตรวจสอบอินเทอร์เน็ต');
+  const body = JSON.stringify(Object.assign({ action, token: state.token, mtoken: state.mtoken, device: state.device }, data || {}));
+  // เน็ตสะดุด: ลองใหม่อัตโนมัติ 2 ครั้ง (ยกเว้นการส่งเช็กอิน เพื่อไม่ให้บันทึกซ้ำ)
+  const tries = action === 'checkin' ? 1 : 3;
+  let res, lastErr;
+  for (let i = 0; i < tries; i++) {
+    try { res = await fetch(API_URL, { method: 'POST', body, redirect: 'follow' }); break; }
+    catch (e) { lastErr = e; if (i < tries - 1) await new Promise((r) => setTimeout(r, 1500 * (i + 1))); }
   }
-  const j = await res.json();
+  if (!res) {
+    const e = new Error('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ (' + ((lastErr && lastErr.message) || 'network') + ')');
+    e.code = 'NETWORK'; throw e;
+  }
+  let j;
+  try { j = await res.json(); } catch (e) { const x = new Error('เซิร์ฟเวอร์ตอบกลับผิดปกติ (HTTP ' + res.status + ') กรุณาลองใหม่'); x.code = 'NETWORK'; throw x; }
   if (j.serverTime) state.offset = j.serverTime - Date.now();
   if (!j.ok) { const e = new Error(j.error || 'เกิดข้อผิดพลาด'); e.code = j.code; throw e; }
   return j;
@@ -285,8 +389,9 @@ async function api(action, data) {
 
 /* ---------- UI helpers ---------- */
 function show(view) {
-  ['vLoading', 'vLogin', 'vSetPw', 'vMain', 'vDone'].forEach((v) => $(v).classList.toggle('hidden', v !== view));
-  $('btnLogout').classList.toggle('hidden', !(view === 'vMain' || view === 'vDone' || view === 'vSetPw'));
+  ['vLoading', 'vLogin', 'vSetPw', 'vMain', 'vDone', 'vNet', 'vHistory', 'vMgrLogin', 'vMgr'].forEach((v) => $(v).classList.toggle('hidden', v !== view));
+  $('btnLogout').classList.toggle('hidden', !['vMain', 'vDone', 'vSetPw', 'vHistory', 'vMgr'].includes(view));
+  document.querySelector('.heroTitle').textContent = state.mode === 'mgr' ? 'หลังบ้านหัวหน้างาน' : 'เช็กอินพนักงาน';
   window.scrollTo(0, 0);
 }
 function toast(msg, kind) {
@@ -420,9 +525,16 @@ async function loadMain() {
       state.token = null; store.del('ci_token');
       showLogin(e.message);
     } else {
-      showLogin(e.message);
+      // เน็ตสะดุด/เซิร์ฟเวอร์ขัดข้อง: ไม่เด้งไปหน้าล็อกอิน ให้กดลองใหม่แทน
+      showNet(e.message, loadMain);
     }
   }
+}
+function showNet(msg, retry) {
+  stopCamera(); stopLocation();
+  $('netMsg').textContent = msg;
+  $('btnNetRetry').onclick = retry;
+  show('vNet');
 }
 
 function renderMain() {
@@ -500,6 +612,8 @@ function locCheck() {
   if (!br || !state.pos) return { ok: false };
   const dist = haversine(state.pos.lat, state.pos.lng, br.lat, br.lng);
   const accOk = state.pos.accuracy <= d.maxAccuracy;
+  // ออกงานนอกสถานที่ได้ (เช่น ไปพบลูกค้า) ขอแค่ได้ตำแหน่ง GPS เพื่อบันทึกว่าออกที่ไหน
+  if (state.type === 'out') return { ok: true, dist, accOk, br, offsite: dist > br.radius };
   return { ok: accOk && dist <= br.radius, dist, accOk, br };
 }
 function renderLoc() {
@@ -513,7 +627,8 @@ function renderLoc() {
   const acc = Math.round(state.pos.accuracy);
   if (!br) return setLoc('warn', `ได้ตำแหน่งแล้ว (±${acc} ม.) — กรุณาเลือกสาขา`);
   const where = `ห่างจาก <b>${esc(br.name)}</b> ประมาณ <b>${fmtDist(c.dist)}</b> (GPS ±${acc} ม.)`;
-  if (!c.accOk) return setLoc('warn', `${where}<br>สัญญาณ GPS ยังไม่แม่นยำพอ กำลังรอค่าที่ดีกว่า… ลองออกไปที่โล่งหรือใกล้หน้าต่าง`);
+  if (c.offsite) return setLoc('warn', `📍 ${where}<br><b>ออกงานนอกสถานที่ได้</b> ระบบจะบันทึกตำแหน่งปัจจุบันไว้`);
+  if (!c.accOk && state.type !== 'out') return setLoc('warn', `${where}<br>สัญญาณ GPS ยังไม่แม่นยำพอ กำลังรอค่าที่ดีกว่า… ลองออกไปที่โล่งหรือใกล้หน้าต่าง`);
   if (c.dist > br.radius) return setLoc('err', `✗ ${where}<br>อยู่นอกพื้นที่สาขา (อนุญาตไม่เกิน ${br.radius} ม.)`);
   setLoc('ok', `✓ ${where}<br>อยู่ในพื้นที่สาขา`);
 }
@@ -606,8 +721,11 @@ function snap() {
   const w = Math.round(v.videoWidth * scale), h = Math.round(v.videoHeight * scale);
   const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
   const ctx = cv.getContext('2d');
+  // กลับด้านแบบกระจก ให้รูปที่ได้ตรงกับภาพที่เห็นตอนถ่าย
+  ctx.save(); ctx.translate(w, 0); ctx.scale(-1, 1);
   ctx.drawImage(v, 0, 0, w, h);
-  if (state.beauty) beautify(ctx, v, w, h);
+  ctx.restore();
+  if (state.beauty) beautify(ctx, cv, w, h);
 
   // ลายน้ำ: ชื่อ / สาขา / เวลาเซิร์ฟเวอร์ / รหัสยืนยัน
   const d = state.data, br = selectedBranch(), now = serverNow();
@@ -644,7 +762,7 @@ function updateSubmit() {
   const missing = [];
   if (!selectedBranch()) missing.push('เลือกสาขา');
   if (!state.position) missing.push('เลือกตำแหน่ง');
-  if (!locCheck().ok) missing.push('ตำแหน่งที่ตั้งต้องอยู่ในพื้นที่สาขา');
+  if (!locCheck().ok) missing.push(state.type === 'out' ? 'รอตำแหน่ง GPS' : 'ตำแหน่งที่ตั้งต้องอยู่ในพื้นที่สาขา');
   if (!state.photo) missing.push('ถ่ายเซลฟี่');
   $('btnSubmit').disabled = state.busy || missing.length > 0;
   $('btnSubmit').textContent = state.type === 'out' ? 'ยืนยันออกงาน' : 'ยืนยันเข้างาน';
@@ -694,6 +812,195 @@ function showDone(r) {
   show('vDone');
 }
 
+/* ---------- ประวัติของฉัน ---------- */
+const TH_DAY = (ds) => new Date(ds + 'T12:00:00+07:00').toLocaleDateString('th-TH', { weekday: 'short', day: 'numeric', month: 'short' });
+async function openHistory() {
+  stopCamera(); stopLocation();
+  $('histList').innerHTML = '<div class="empty">กำลังโหลด…</div>';
+  show('vHistory');
+  try {
+    const r = await api('history', { days: 30 });
+    if (!r.history.length) { $('histList').innerHTML = '<div class="empty">ยังไม่มีประวัติการเช็กอิน</div>'; return; }
+    $('histList').innerHTML = r.history.map((d) => {
+      const inn = d.in ? `<span class="t">${esc(d.in.time)}</span>` + (d.in.lateMin > 0 ? ` <span class="pill late">สาย ${d.in.lateMin} นาที</span>` : '') : '<span class="muted">—</span>';
+      const out = d.out ? `<span class="t">${esc(d.out.time)}</span>` + (d.out.lateMin < 0 ? ` <span class="pill late">ออกก่อน ${-d.out.lateMin} นาที</span>` : '') +
+        (/นอกสถานที่/.test(d.out.notes) ? ' <span class="pill off">นอกสถานที่</span>' : '') : '<span class="muted">—</span>';
+      return `<div class="item"><div class="top"><span class="name">${esc(TH_DAY(d.date))}</span>${d.shift ? `<span class="pill">กะ ${esc(d.shift)}</span>` : ''}</div>
+        <div class="hist" style="margin-top:8px"><span class="muted small">เข้างาน</span><span>${inn}</span><span class="muted small">ออกงาน</span><span>${out}</span></div>
+        <div class="sub">${esc(d.branch || '')}${d.flags ? ` · <span class="pill flag">ต้องตรวจสอบ ${d.flags}</span>` : ''}</div></div>`;
+    }).join('');
+  } catch (e) {
+    if (e.code === 'RELOGIN') { state.token = null; store.del('ci_token'); return showLogin(e.message); }
+    $('histList').innerHTML = `<div class="empty">${esc(e.message)}</div>`;
+  }
+}
+
+/* ---------- หลังบ้านหัวหน้างาน ---------- */
+const todayStr = () => serverNow().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
+function setMode(m) { state.mode = m; store.set('ci_mode', m); }
+function showMgrLogin(msg) {
+  setMode('mgr'); stopCamera(); stopLocation();
+  $('mgrLoginBox').classList.remove('hidden'); $('mgrSetPwBox').classList.add('hidden');
+  $('inMEmail').value = store.get('ci_memail') || '';
+  show('vMgrLogin');
+  if (msg) toast(msg, 'err');
+}
+async function mgrLogin() {
+  const email = $('inMEmail').value.trim(), password = $('inMPw').value;
+  if (!email || !password) return toast('กรุณากรอกอีเมลและรหัสผ่าน', 'err');
+  setBusy($('btnMLogin'), true, 'กำลังเข้าสู่ระบบ…');
+  try {
+    const r = await api('mgrLogin', { email, password });
+    state.mtoken = r.token; store.set('ci_mtoken', r.token); store.set('ci_memail', email); $('inMPw').value = '';
+    if (r.mustChange) { $('mgrLoginBox').classList.add('hidden'); $('mgrSetPwBox').classList.remove('hidden'); }
+    else await loadMgr();
+  } catch (e) { toast(e.message, 'err'); }
+  setBusy($('btnMLogin'), false, 'เข้าสู่ระบบ');
+}
+async function mgrSetPw() {
+  const a = $('inMNew').value, b = $('inMNew2').value;
+  if (a.length < 8) return toast('รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร', 'err');
+  if (a !== b) return toast('รหัสผ่านทั้งสองช่องไม่ตรงกัน', 'err');
+  setBusy($('btnMSetPw'), true, 'กำลังบันทึก…');
+  try { await api('mgrSetPassword', { newPassword: a }); toast('ตั้งรหัสผ่านเรียบร้อย', 'ok'); await loadMgr(); }
+  catch (e) { toast(e.message, 'err'); }
+  setBusy($('btnMSetPw'), false, 'บันทึกรหัสผ่าน');
+}
+async function mgrLogout() {
+  try { await api('mgrLogout'); } catch (e) {}
+  state.mtoken = null; store.del('ci_mtoken'); showMgrLogin();
+}
+function mgrErr(e) {
+  if (e.code === 'MGR_RELOGIN') { state.mtoken = null; store.del('ci_mtoken'); return showMgrLogin(e.message); }
+  if (e.code === 'MGR_SET_PASSWORD') { showMgrLogin(); $('mgrLoginBox').classList.add('hidden'); $('mgrSetPwBox').classList.remove('hidden'); return; }
+  toast(e.message, 'err');
+}
+async function loadMgr(date) {
+  setMode('mgr');
+  if (!$('mDate').value) $('mDate').value = todayStr();
+  if (!$('mMonth').value) $('mMonth').value = todayStr().slice(0, 7);
+  if (!state.mgr) show('vLoading');
+  try {
+    const d = await api('mgrDashboard', { date: date || $('mDate').value });
+    state.mgr = d;
+    $('mgrName').textContent = d.manager.name || d.manager.email;
+    $('mgrRegion').textContent = 'เขตที่ดูแล: ' + d.manager.regions.join(', ');
+    const cur = $('mBranch').value;
+    $('mBranch').innerHTML = '<option value="">ทุกสาขา</option>' + d.branches.map((b) => `<option value="${esc(b.id)}">${esc(b.name)}</option>`).join('');
+    $('mBranch').value = cur;
+    $('devBadge').textContent = d.pending.length; $('devBadge').classList.toggle('hidden', !d.pending.length);
+    show('vMgr');
+    renderMgr();
+  } catch (e) {
+    if (e.code === 'NETWORK') return showNet(e.message, () => loadMgr(date));
+    mgrErr(e);
+  }
+}
+function brName(id) { const b = state.mgr && state.mgr.branches.find((x) => x.id === id); return b ? b.name : id; }
+function renderMgr() {
+  const tab = state.mgrTab, body = $('mgrBody');
+  markSeg($('mgrTabs'), tab);
+  $('mDate').classList.toggle('hidden', tab === 'month' || tab === 'devices');
+  $('mMonth').classList.toggle('hidden', tab !== 'month');
+  $('mBranch').classList.toggle('hidden', tab === 'devices');
+  if (tab === 'today') return renderMgrToday();
+  if (tab === 'devices') return renderMgrDevices();
+  body.innerHTML = '<div class="empty">กำลังโหลด…</div>';
+  if (tab === 'checkins') return loadMgrCheckins();
+  if (tab === 'month') return loadMgrMonth();
+}
+function renderMgrToday() {
+  const fb = $('mBranch').value;
+  const ppl = state.mgr.people.filter((p) => !fb || p.branch === fb);
+  const n = (f) => ppl.filter(f).length;
+  const order = { missing: 0, absent: 1, late: 2, none: 3, ok: 4, off: 5 };
+  const sorted = ppl.slice().sort((a, b) => (order[a.tone] - order[b.tone]) || a.name.localeCompare(b.name, 'th'));
+  $('mgrBody').innerHTML = `<div class="tiles">
+      <div class="tile ok"><b>${n((p) => p.tone === 'ok' || p.tone === 'late')}</b><span>มาแล้ว</span></div>
+      <div class="tile late"><b>${n((p) => p.tone === 'late')}</b><span>สาย</span></div>
+      <div class="tile bad"><b>${n((p) => p.tone === 'missing' || p.tone === 'absent')}</b><span>ยังไม่มา/ขาด</span></div>
+      <div class="tile off"><b>${n((p) => p.tone === 'off')}</b><span>หยุด/ลา</span></div>
+      <div class="tile late"><b>${n((p) => p.early > 0)}</b><span>ออกก่อนเวลา</span></div>
+      <div class="tile bad"><b>${n((p) => p.flags > 0)}</b><span>ต้องตรวจสอบ</span></div>
+    </div>` + (sorted.length ? sorted.map((p) => `<div class="item">
+      <div class="top"><span class="name">${esc(p.name)}</span><span class="pill ${p.tone}">${esc(p.status)}</span></div>
+      <div class="sub">${esc(p.branchName)} · ${esc(p.position || '')}${p.shift ? ' · กะ ' + esc(p.shift) : ''}</div>
+      <div class="grid4"><div>เข้า<b>${esc(p.in || '—')}</b></div><div>ออก<b>${esc(p.out || '—')}</b></div>
+        <div>ออกก่อน<b>${p.early ? p.early + "'" : '—'}</b></div><div>ตรวจสอบ<b>${p.flags || '—'}</b></div></div>
+      ${p.outNote || (p.inBranch && p.inBranch !== p.branchName) ? `<div class="sub">${p.outNote ? '📍 ออกงานนอกสถานที่ ' : ''}${p.inBranch && p.inBranch !== p.branchName ? '· เข้างานที่ ' + esc(p.inBranch) : ''}</div>` : ''}
+      <div class="acts"><button data-act="reset" data-email="${esc(p.email)}" data-name="${esc(p.name)}">🔑 รีเซ็ตรหัสผ่าน</button></div>
+    </div>`).join('') : '<div class="empty">ไม่มีพนักงานในเงื่อนไขนี้</div>');
+}
+async function loadMgrCheckins() {
+  try {
+    const r = await api('mgrCheckins', { date: $('mDate').value });
+    if (state.mgrTab !== 'checkins') return;
+    const fb = $('mBranch').value, fbName = fb ? brName(fb) : '';
+    const list = r.checkins.filter((c) => !fb || c.branchName === fbName);
+    $('mgrBody').innerHTML = list.length ? list.map((c) => `<div class="item">
+      <div class="top"><span class="name">${esc(c.time)} · ${esc(c.name)}</span><span class="pill ${c.type === 'เข้างาน' ? 'in' : 'out'}">${esc(c.type)}</span></div>
+      <div class="sub">${esc(c.branchName)}${c.dist !== '' ? ' · ห่าง ' + esc(c.dist) + ' ม.' : ''} · ${esc(c.device)}${c.shift ? ' · กะ ' + esc(c.shift) : ''}</div>
+      <div class="sub">ท่าทาง: ${esc(c.gesture)} · รหัส ${esc(c.code)}</div>
+      ${c.notes ? `<div class="sub" style="color:var(--warn)">${esc(c.notes)}</div>` : ''}
+      <div class="acts">${c.status === 'ต้องตรวจสอบ' ? '<span class="pill flag">ต้องตรวจสอบ</span>' : '<span class="pill ok">ผ่าน</span>'}
+        ${c.photoId ? `<button data-act="photo" data-id="${esc(c.photoId)}" data-title="${esc(c.time + ' ' + c.name)}" data-sub="ท่าทาง: ${esc(c.gesture)} · รหัส ${esc(c.code)}">🖼️ ดูรูป</button>` : ''}
+        ${c.map ? `<a href="${esc(c.map)}" target="_blank" rel="noopener"><button>🗺️ แผนที่</button></a>` : ''}</div>
+    </div>`).join('') : '<div class="empty">ไม่มีการเช็กอินในวันนี้</div>';
+  } catch (e) { mgrErr(e); $('mgrBody').innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+async function loadMgrMonth() {
+  try {
+    const r = await api('mgrMonth', { month: $('mMonth').value });
+    if (state.mgrTab !== 'month') return;
+    const fb = $('mBranch').value;
+    const rows = r.rows.filter((m) => !fb || m.branch === fb);
+    $('mgrBody').innerHTML = rows.length ? rows.map((m) => `<div class="item">
+      <div class="top"><span class="name">${esc(m.name)}</span><span class="pill">${esc(m.branchName)}</span></div>
+      <div class="grid4"><div>มาทำงาน<b>${m.present}/${m.workDays}</b></div><div>สาย<b>${m.late}</b></div><div>ขาด<b>${m.absent}</b></div><div>ออกก่อน<b>${m.early}</b></div></div>
+      <div class="grid4"><div>สายรวม<b>${m.lateMin}'</b></div><div>นอกสถานที่<b>${m.offsite}</b></div><div>หยุด/ลา<b>${m.off}</b></div><div>ตรวจสอบ<b>${m.flags}</b></div></div>
+    </div>`).join('') : '<div class="empty">ไม่มีข้อมูลเดือนนี้</div>';
+  } catch (e) { mgrErr(e); $('mgrBody').innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+function renderMgrDevices() {
+  const list = state.mgr.pending;
+  const brOpts = state.mgr.branches.map((b) => `<option value="${esc(b.id)}">${esc(b.name)}</option>`).join('');
+  $('mgrBody').innerHTML = list.length ? list.map((d) => `<div class="item">
+      <div class="top"><span class="name">${esc(d.name)}</span><span class="pill late">รออนุมัติ</span></div>
+      <div class="sub">${esc(brName(d.branch))} · ${esc(d.type === 'mobile' ? 'มือถือ' : d.type === 'tablet' ? 'แท็บเล็ต' : 'คอมพิวเตอร์')} · ${esc(d.at)}</div>
+      <div class="sub">${esc(d.desc)}</div>
+      <div class="acts"><button class="primary" data-act="dev" data-id="${esc(d.id)}" data-status="APPROVED">✓ อนุมัติ (เครื่องส่วนตัว)</button>
+        <button data-act="dev" data-id="${esc(d.id)}" data-status="BLOCKED">ระงับ</button></div>
+      <div class="acts"><select data-pcfor="${esc(d.id)}" style="flex:1;padding:8px">${brOpts}</select>
+        <button data-act="dev" data-id="${esc(d.id)}" data-status="BRANCH_PC">ตั้งเป็นคอมสาขา</button></div>
+    </div>`).join('') : '<div class="empty">ไม่มีอุปกรณ์รออนุมัติ 🎉</div>';
+}
+async function mgrAction(btn) {
+  const act = btn.dataset.act;
+  if (act === 'photo') {
+    $('modalTitle').textContent = btn.dataset.title; $('modalBody').innerHTML = '<div class="empty">กำลังโหลดรูป…</div>';
+    $('modal').classList.remove('hidden');
+    try { const r = await api('mgrPhoto', { photoId: btn.dataset.id }); $('modalBody').innerHTML = `<img src="${r.photo}" alt="รูปเซลฟี่"><div class="sub">${esc(btn.dataset.sub)}</div>`; }
+    catch (e) { $('modalBody').innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+  } else if (act === 'dev') {
+    const status = btn.dataset.status;
+    const branch = status === 'BRANCH_PC' ? document.querySelector(`[data-pcfor="${btn.dataset.id}"]`).value : '';
+    if (status === 'BLOCKED' && !confirm('ระงับอุปกรณ์นี้?')) return;
+    btn.disabled = true;
+    try { await api('mgrDevice', { deviceId: btn.dataset.id, status, branch }); toast('บันทึกแล้ว', 'ok'); await loadMgr(); }
+    catch (e) { mgrErr(e); btn.disabled = false; }
+  } else if (act === 'reset') {
+    if (!confirm('รีเซ็ตรหัสผ่านของ ' + btn.dataset.name + '?\nรหัสผ่านเดิมจะใช้ไม่ได้ทันที')) return;
+    btn.disabled = true;
+    try {
+      const r = await api('mgrResetPassword', { email: btn.dataset.email });
+      $('modalTitle').textContent = 'รหัสผ่านเริ่มต้นใหม่';
+      $('modalBody').innerHTML = `<p>ของ <b>${esc(r.name)}</b></p><p style="font-family:Prompt,sans-serif;font-size:40px;letter-spacing:6px;text-align:center;margin:12px 0;color:var(--brand)">${esc(r.password)}</p><p class="muted small">ส่งรหัสนี้ให้พนักงาน เมื่อเข้าสู่ระบบ ระบบจะให้ตั้งรหัสผ่านใหม่เอง</p>`;
+      $('modal').classList.remove('hidden');
+    } catch (e) { mgrErr(e); }
+    btn.disabled = false;
+  }
+}
+
 /* ---------- Events ---------- */
 $('btnLogin').onclick = login;
 $('inPw').addEventListener('keydown', (e) => { if (e.key === 'Enter') login(); });
@@ -705,7 +1012,21 @@ $('btnResend').onclick = requestOtp;
 $('btnVerify').onclick = verifyOtp;
 $('inOtp').addEventListener('keydown', (e) => { if (e.key === 'Enter') verifyOtp(); });
 $('inEmail').addEventListener('keydown', (e) => { if (e.key === 'Enter') ($('pwBox').classList.contains('hidden') ? requestOtp() : $('inPw').focus()); });
-$('btnLogout').onclick = logout;
+$('btnLogout').onclick = () => (state.mode === 'mgr' ? mgrLogout() : logout());
+$('btnHistory').onclick = openHistory;
+$('btnHistBack').onclick = loadMain;
+$('btnGoMgr').onclick = () => { setMode('mgr'); state.mtoken ? loadMgr() : showMgrLogin(); };
+$('btnBackStaff').onclick = $('btnGoStaff').onclick = () => { setMode('staff'); state.mgr = null; state.token ? loadMain() : showLogin(); };
+$('btnMLogin').onclick = mgrLogin;
+$('inMPw').addEventListener('keydown', (e) => { if (e.key === 'Enter') mgrLogin(); });
+$('btnMSetPw').onclick = mgrSetPw;
+$('mgrTabs').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; state.mgrTab = b.dataset.v; renderMgr(); };
+$('mDate').onchange = () => loadMgr($('mDate').value);
+$('mMonth').onchange = () => renderMgr();
+$('mBranch').onchange = () => renderMgr();
+$('mgrBody').addEventListener('click', (e) => { const b = e.target.closest('button[data-act]'); if (b) mgrAction(b); });
+$('modalClose').onclick = () => $('modal').classList.add('hidden');
+$('modal').addEventListener('click', (e) => { if (e.target.id === 'modal') $('modal').classList.add('hidden'); });
 $('btnLoc').onclick = startLocation;
 $('btnCam').onclick = openCamera;
 $('btnBeauty').onclick = () => {
@@ -719,7 +1040,7 @@ $('btnBack').onclick = loadMain;
 $('selBranch').onchange = () => { renderLoc(); if (state.photo) { resetPhoto(); toast('เปลี่ยนสาขาแล้ว กรุณาถ่ายรูปใหม่', 'info'); } };
 $('segType').onclick = (e) => {
   const b = e.target.closest('button'); if (!b) return;
-  state.type = b.dataset.v; markSeg($('segType'), state.type);
+  state.type = b.dataset.v; markSeg($('segType'), state.type); renderLoc();
   if (state.photo) { resetPhoto(); toast('เปลี่ยนประเภทแล้ว กรุณาถ่ายรูปใหม่', 'info'); }
   updateSubmit();
 };
@@ -740,7 +1061,10 @@ document.addEventListener('visibilitychange', () => {
   state.beauty = store.get('ci_beauty') !== '0';  // ค่าเริ่มต้น: เปิด
   applyBeauty();
   state.token = store.get('ci_token');
+  state.mtoken = store.get('ci_mtoken');
+  state.mode = location.hash === '#manager' ? 'mgr' : (store.get('ci_mode') || 'staff');
   if (!API_URL) return showLogin('ยังไม่ได้ตั้งค่า API_URL — ผู้ดูแลต้องวาง Web app URL ในไฟล์ Index.html');
+  if (state.mode === 'mgr') return state.mtoken ? loadMgr() : showMgrLogin();
   if (state.token) loadMain(); else showLogin();
 })();
 </script>
