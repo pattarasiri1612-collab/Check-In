@@ -589,15 +589,23 @@ function renderMain() {
   // ยังไม่ได้กดออกงาน → ต้องออกงานก่อนจึงจะเข้างานใหม่ได้
   const op = d.openShift;
   if (op) state.type = 'out';
-  $('segType').querySelector('[data-v="in"]').classList.toggle('locked', !!op);
-  $('openBanner').classList.toggle('hidden', !op);
-  if (op) {
+  // 1 วัน เข้างาน 1 ครั้ง + ออกงาน 1 ครั้ง (การปิดงานค้างของวันก่อนไม่นับ)
+  const tIn = d.today.find((t) => t.type === 'เข้างาน');
+  const tOut = d.today.find((t) => t.type === 'ออกงาน' && !t.closing);
+  state.doneToday = !op && !!(tIn || tOut);
+  $('segType').querySelector('[data-v="in"]').classList.toggle('locked', !!op || state.doneToday);
+  $('segType').querySelector('[data-v="out"]').classList.toggle('locked', state.doneToday);
+  $('openBanner').classList.toggle('hidden', !op && !state.doneToday);
+  $('openBanner').className = 'status ' + (state.doneToday ? 'ok' : 'warn') + (op || state.doneToday ? '' : ' hidden');
+  if (state.doneToday) {
+    $('openBanner').innerHTML = `✅ <b>วันนี้บันทึกครบแล้ว</b>${tIn ? ' · เข้างาน ' + esc(tIn.time.slice(0, 5)) : ''}${tOut ? ' · ออกงาน ' + esc(tOut.time.slice(0, 5)) : ''}<br>เข้างานและออกงานได้วันละ 1 ครั้ง`;
+  } else if (op) {
     $('openBanner').innerHTML = op.overdue
       ? `⚠️ <b>ยังไม่ได้กดออกงานของวันที่ ${esc(TH_DAY(op.date))}</b> (เข้างาน ${esc(op.time)} ที่ ${esc(op.branchName)})<br>กรุณากด “ออกงาน” และพิมพ์เหตุผลที่ลืมกดออกงานก่อน จึงจะเข้างานวันนี้ได้`
       : `วันนี้เข้างานแล้วเวลา <b>${esc(op.time)}</b> ที่ ${esc(op.branchName)} — กด “ออกงาน” เมื่อเลิกงาน`;
   }
   $('inComment').value = '';
-  markSeg($('segType'), state.type);
+  markSeg($('segType'), state.doneToday ? '' : state.type);
   renderCommentRule();
 
   renderChallenge();
@@ -798,6 +806,7 @@ function resetPhoto() {
 function updateSubmit() {
   if (!state.data) return;
   const missing = [];
+  if (state.doneToday) missing.push('วันนี้บันทึกครบแล้ว');
   if (!selectedBranch()) missing.push('เลือกสาขา');
   if (!state.position) missing.push('เลือกตำแหน่ง');
   if (!locCheck().ok) missing.push(state.type === 'out' ? 'รอตำแหน่ง GPS' : 'ตำแหน่งที่ตั้งต้องอยู่ในพื้นที่สาขา');
@@ -1130,6 +1139,7 @@ $('btnBack').onclick = loadMain;
 $('selBranch').onchange = () => { renderLoc(); if (state.photo) { resetPhoto(); toast('เปลี่ยนสาขาแล้ว กรุณาถ่ายรูปใหม่', 'info'); } };
 $('segType').onclick = (e) => {
   const b = e.target.closest('button'); if (!b) return;
+  if (state.doneToday) return toast('วันนี้บันทึกเข้างานและออกงานครบแล้ว', 'info');
   if (b.dataset.v === 'in' && state.data && state.data.openShift) {
     return toast('ต้องกด “ออกงาน” ของรอบก่อนให้เรียบร้อยก่อน จึงจะเข้างานใหม่ได้', 'err');
   }
