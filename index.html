@@ -108,7 +108,15 @@
   .tabs { margin-bottom: 14px; } .tabs button { font-size: 14px; padding: 10px 2px; }
   .badge { display: inline-grid; place-items: center; min-width: 20px; height: 20px; border-radius: 999px; background: var(--err); color: #fff; font-size: 12px; padding: 0 6px; }
   .filters { padding: 12px; } .frow { display: flex; gap: 8px; } .frow > * { flex: 1; min-width: 0; }
-  .tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
+  .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 14px; }
+  .tiles .tile { padding: 10px 4px; } .tiles .tile b { font-size: 22px; } .tiles .tile span { font-size: 11px; line-height: 1.25; display: block; }
+  textarea { width: 100%; font: inherit; padding: 12px 14px; border: 1.5px solid var(--line); border-radius: 14px; background: #fbfefe; color: var(--ink); resize: vertical; min-height: 64px; }
+  textarea:focus { outline: none; border-color: var(--brand-2); box-shadow: 0 0 0 4px rgba(0, 161, 154, .15); }
+  textarea.need { border-color: var(--out); background: #fff8f0; }
+  .count { font-size: 12px; color: var(--muted); text-align: right; margin-top: 4px; }
+  .comment { margin-top: 8px; background: #f4faf9; border-left: 3px solid var(--brand-2); border-radius: 8px; padding: 6px 10px; font-size: 13px; }
+  #segType button.locked { opacity: .4; }
+  .exportRow { display: flex; gap: 8px; margin-bottom: 12px; } .exportRow button { flex: 1; font-size: 14px; padding: 11px 8px; }
   .tile { background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 12px 8px; text-align: center; box-shadow: var(--shadow); }
   .tile b { display: block; font-family: 'Prompt', sans-serif; font-size: 26px; line-height: 1.1; }
   .tile span { font-size: 12px; color: var(--muted); }
@@ -193,6 +201,7 @@
     </div>
 
     <div class="card">
+      <div id="openBanner" class="status warn hidden" style="margin-bottom:12px"></div>
       <div class="seg" id="segType">
         <button data-v="in" class="on">เข้างาน</button>
         <button data-v="out">ออกงาน</button>
@@ -203,6 +212,9 @@
       <input id="inName" readonly>
       <label>ตำแหน่ง</label>
       <div class="seg wrap" id="segPos"></div>
+      <label for="inComment">💬 หมายเหตุ / เหตุผล <span class="muted small" id="commentHint">(ไม่บังคับ)</span></label>
+      <textarea id="inComment" maxlength="300" placeholder="เช่น ไปพบลูกค้าที่…, รถติดเพราะฝนตก, ประชุมนอกสถานที่"></textarea>
+      <div class="count" id="commentCount">0/300</div>
     </div>
 
     <div class="card">
@@ -571,11 +583,30 @@ function renderMain() {
   // ประเภท: ถ้าเข้างานแล้วแต่ยังไม่ออก ให้ตั้งเป็น "ออกงาน"
   const hasIn = d.today.some((t) => t.type === 'เข้างาน'), hasOut = d.today.some((t) => t.type === 'ออกงาน');
   state.type = hasIn && !hasOut ? 'out' : 'in';
+  // ยังไม่ได้กดออกงาน → ต้องออกงานก่อนจึงจะเข้างานใหม่ได้
+  const op = d.openShift;
+  if (op) state.type = 'out';
+  $('segType').querySelector('[data-v="in"]').classList.toggle('locked', !!op);
+  $('openBanner').classList.toggle('hidden', !op);
+  if (op) {
+    $('openBanner').innerHTML = op.overdue
+      ? `⚠️ <b>ยังไม่ได้กดออกงานของวันที่ ${esc(TH_DAY(op.date))}</b> (เข้างาน ${esc(op.time)} ที่ ${esc(op.branchName)})<br>กรุณากด “ออกงาน” และพิมพ์เหตุผลที่ลืมกดออกงานก่อน จึงจะเข้างานวันนี้ได้`
+      : `วันนี้เข้างานแล้วเวลา <b>${esc(op.time)}</b> ที่ ${esc(op.branchName)} — กด “ออกงาน” เมื่อเลิกงาน`;
+  }
+  $('inComment').value = '';
   markSeg($('segType'), state.type);
+  renderCommentRule();
 
   renderChallenge();
   resetPhoto();
   renderLoc();
+}
+function needComment() { return !!(state.data && state.data.openShift && state.data.openShift.overdue && state.type === 'out'); }
+function renderCommentRule() {
+  const need = needComment();
+  $('commentHint').textContent = need ? '(จำเป็น: เหตุผลที่ลืมกดออกงาน)' : '(ไม่บังคับ)';
+  $('inComment').classList.toggle('need', need && $('inComment').value.trim().length < 3);
+  $('commentCount').textContent = $('inComment').value.length + '/300';
 }
 function renderChallenge() {
   $('gesture').textContent = state.data.challenge.gesture;
@@ -768,6 +799,7 @@ function updateSubmit() {
   if (!state.position) missing.push('เลือกตำแหน่ง');
   if (!locCheck().ok) missing.push(state.type === 'out' ? 'รอตำแหน่ง GPS' : 'ตำแหน่งที่ตั้งต้องอยู่ในพื้นที่สาขา');
   if (!state.photo) missing.push('ถ่ายเซลฟี่');
+  if (needComment() && $('inComment').value.trim().length < 3) missing.push('พิมพ์เหตุผลที่ลืมกดออกงาน');
   $('btnSubmit').disabled = state.busy || missing.length > 0;
   $('btnSubmit').textContent = state.type === 'out' ? 'ยืนยันออกงาน' : 'ยืนยันเข้างาน';
   $('btnSubmit').classList.toggle('out', state.type === 'out');
@@ -785,6 +817,7 @@ async function submit() {
     type: state.type, branchId: $('selBranch').value, position: state.position,
     location: p ? { lat: p.lat, lng: p.lng, accuracy: p.accuracy, ageMs: Date.now() - p.at } : null,
     photo: state.photo, challengeCode: state.data.challenge.code, clientTime: Date.now(),
+    comment: $('inComment').value.trim().slice(0, 300),
     camera: { source: 'live', label: state.camLabel, filter: state.beauty ? 'beauty' : 'none' },
   };
   try {
@@ -831,7 +864,8 @@ async function openHistory() {
         (/นอกสถานที่/.test(d.out.notes) ? ' <span class="pill off">นอกสถานที่</span>' : '') : '<span class="muted">—</span>';
       return `<div class="item"><div class="top"><span class="name">${esc(TH_DAY(d.date))}</span>${d.shift ? `<span class="pill">กะ ${esc(d.shift)}</span>` : ''}</div>
         <div class="hist" style="margin-top:8px"><span class="muted small">เข้างาน</span><span>${inn}</span><span class="muted small">ออกงาน</span><span>${out}</span></div>
-        <div class="sub">${esc(d.branch || '')}${d.flags ? ` · <span class="pill flag">ต้องตรวจสอบ ${d.flags}</span>` : ''}</div></div>`;
+        <div class="sub">${esc(d.branch || '')}${d.flags ? ` · <span class="pill flag">ต้องตรวจสอบ ${d.flags}</span>` : ''}</div>
+        ${[d.in, d.out].filter((x) => x && x.comment).map((x) => `<div class="comment">💬 ${esc(x.time)} ${esc(x.comment)}</div>`).join('')}</div>`;
     }).join('');
   } catch (e) {
     if (e.code === 'RELOGIN') { state.token = null; store.del('ci_token'); return showLogin(e.message); }
@@ -914,11 +948,13 @@ function renderMgr() {
   if (tab === 'month') return loadMgrMonth();
 }
 const MGR_FILTERS = {
+  all: { label: 'ทั้งหมด', f: () => true },
   came: { label: 'มาแล้ว', f: (p) => p.tone === 'ok' || p.tone === 'late' },
   late: { label: 'สาย', f: (p) => p.tone === 'late' },
   missing: { label: 'ยังไม่มา/ขาด', f: (p) => p.tone === 'missing' || p.tone === 'absent' },
   off: { label: 'หยุด/ลา', f: (p) => p.tone === 'off' },
   early: { label: 'ออกก่อนเวลา', f: (p) => p.early > 0 },
+  noout: { label: 'ลืมออกงาน', f: (p) => p.noOut },
   flags: { label: 'ต้องตรวจสอบ', f: (p) => p.flags > 0 },
 };
 function renderMgrToday() {
@@ -928,14 +964,14 @@ function renderMgrToday() {
   const cur = state.mgrFilter && MGR_FILTERS[state.mgrFilter] ? state.mgrFilter : '';
   const tile = (k, cls) => `<button class="tile ${cls}${cur === k ? ' on' : ''}" data-filter="${k}"><b>${n(k)}</b><span>${MGR_FILTERS[k].label}</span></button>`;
   const order = { missing: 0, absent: 1, late: 2, none: 3, ok: 4, off: 5 };
-  const shown = ppl.filter((p) => !cur || MGR_FILTERS[cur].f(p))
+  const shown = ppl.filter((p) => !cur || cur === 'all' || MGR_FILTERS[cur].f(p))
     .sort((a, b) => (order[a.tone] - order[b.tone]) || a.name.localeCompare(b.name, 'th'));
-  $('mgrBody').innerHTML = `<div class="tiles">${tile('came', 'ok')}${tile('late', 'late')}${tile('missing', 'bad')}${tile('off', 'off')}${tile('early', 'late')}${tile('flags', 'bad')}</div>` +
+  $('mgrBody').innerHTML = `<div class="tiles">${tile('all', '')}${tile('came', 'ok')}${tile('late', 'late')}${tile('missing', 'bad')}${tile('off', 'off')}${tile('early', 'late')}${tile('noout', 'bad')}${tile('flags', 'bad')}</div>` +
     (cur ? `<div class="filterBar"><span>แสดงเฉพาะ: ${MGR_FILTERS[cur].label} (${shown.length} คน)</span><button class="link" data-filter="">ดูทั้งหมด ✕</button></div>` : '') +
     (shown.length ? shown.map((p) => `<div class="item">
       <div class="top"><span class="name">${esc(p.name)}</span><span class="pill ${p.tone}">${esc(p.status)}</span></div>
       <div class="sub">${esc(p.branchName)} · ${esc(p.position || '')}${p.shift ? ' · กะ ' + esc(p.shift) : ''}</div>
-      <div class="grid4"><div>เข้า<b>${esc(p.in || '—')}</b></div><div>ออก<b>${esc(p.out || '—')}</b></div>
+      <div class="grid4"><div>เข้า<b>${esc(p.in || '—')}</b></div><div>ออก<b>${p.noOut ? '<span style="color:var(--err)">ลืม</span>' : esc(p.out || '—')}</b></div>
         <div>ออกก่อน<b>${p.early ? p.early + "'" : '—'}</b></div><div>ตรวจสอบ<b>${p.flags || '—'}</b></div></div>
       ${p.outNote || (p.inBranch && p.inBranch !== p.branchName) ? `<div class="sub">${p.outNote ? '📍 ออกงานนอกสถานที่ ' : ''}${p.inBranch && p.inBranch !== p.branchName ? '· เข้างานที่ ' + esc(p.inBranch) : ''}</div>` : ''}
       ${p.flags && p.flagNotes && p.flagNotes.length ? `<div class="flagBox">⚠️ ต้องตรวจสอบเพราะ<br>${p.flagNotes.map(esc).join('<br>')}</div>` : ''}
@@ -952,7 +988,8 @@ async function loadMgrCheckins() {
       <div class="top"><span class="name">${esc(c.time)} · ${esc(c.name)}</span><span class="pill ${c.type === 'เข้างาน' ? 'in' : 'out'}">${esc(c.type)}</span></div>
       <div class="sub">${esc(c.branchName)}${c.dist !== '' ? ' · ห่าง ' + esc(c.dist) + ' ม.' : ''} · ${esc(c.device)}${c.shift ? ' · กะ ' + esc(c.shift) : ''}</div>
       <div class="sub">ท่าทาง: ${esc(c.gesture)} · รหัส ${esc(c.code)}</div>
-      ${c.notes ? `<div class="sub" style="color:var(--warn)">${esc(c.notes)}</div>` : ''}
+      ${c.notes ? `<div class="sub" style="color:var(--warn)">${esc(c.notes.replace(/(^| \| )หมายเหตุพนักงาน: .*?(?= \| |$)/, ''))}</div>` : ''}
+      ${c.comment ? `<div class="comment">💬 ${esc(c.comment)}</div>` : ''}
       <div class="acts">${c.status === 'ต้องตรวจสอบ' ? '<span class="pill flag">ต้องตรวจสอบ</span>' : '<span class="pill ok">ผ่าน</span>'}
         ${c.photoId ? `<button data-act="photo" data-id="${esc(c.photoId)}" data-title="${esc(c.time + ' ' + c.name)}" data-sub="ท่าทาง: ${esc(c.gesture)} · รหัส ${esc(c.code)}">🖼️ ดูรูป</button>` : ''}
         ${c.map ? `<a href="${esc(c.map)}" target="_blank" rel="noopener"><button>🗺️ แผนที่</button></a>` : ''}</div>
@@ -965,12 +1002,23 @@ async function loadMgrMonth() {
     if (state.mgrTab !== 'month') return;
     const fb = $('mBranch').value;
     const rows = r.rows.filter((m) => !fb || m.branch === fb);
-    $('mgrBody').innerHTML = rows.length ? rows.map((m) => `<div class="item">
+    state.mgrMonthRows = rows;
+    $('mgrBody').innerHTML = `<div class="exportRow"><button data-act="xsum">⬇️ สรุปรายเดือน (Excel)</button><button data-act="xall">⬇️ รายการเช็กอินทั้งเดือน (Excel)</button></div>` +
+      (rows.length ? rows.map((m) => `<div class="item">
       <div class="top"><span class="name">${esc(m.name)}</span><span class="pill">${esc(m.branchName)}</span></div>
       <div class="grid4"><div>มาทำงาน<b>${m.present}/${m.workDays}</b></div><div>สาย<b>${m.late}</b></div><div>ขาด<b>${m.absent}</b></div><div>ออกก่อน<b>${m.early}</b></div></div>
-      <div class="grid4"><div>สายรวม<b>${m.lateMin}'</b></div><div>นอกสถานที่<b>${m.offsite}</b></div><div>หยุด/ลา<b>${m.off}</b></div><div>ตรวจสอบ<b>${m.flags}</b></div></div>
-    </div>`).join('') : '<div class="empty">ไม่มีข้อมูลเดือนนี้</div>';
+      <div class="grid4"><div>สายรวม<b>${m.lateMin}'</b></div><div>ลืมออกงาน<b>${m.noOut || 0}</b></div><div>นอกสถานที่<b>${m.offsite}</b></div><div>ตรวจสอบ<b>${m.flags}</b></div></div>
+      <div class="sub">หยุด/ลา ${m.off} วัน</div>
+    </div>`).join('') : '<div class="empty">ไม่มีข้อมูลเดือนนี้</div>');
   } catch (e) { mgrErr(e); $('mgrBody').innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+/* ไฟล์ CSV แบบ UTF-8 (มี BOM) เปิดใน Excel แล้วภาษาไทยไม่เพี้ยน */
+function downloadCsv(name, header, rows) {
+  const cell = (v) => { const t = String(v == null ? '' : v); return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
+  const csv = '﻿' + [header].concat(rows).map((r) => r.map(cell).join(',')).join('\r\n');
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1500);
 }
 function renderMgrDevices() {
   const list = state.mgr.pending;
@@ -999,6 +1047,19 @@ async function mgrAction(btn) {
     btn.disabled = true;
     try { await api('mgrDevice', { deviceId: btn.dataset.id, status, branch }); toast('บันทึกแล้ว', 'ok'); await loadMgr(); }
     catch (e) { mgrErr(e); btn.disabled = false; }
+  } else if (act === 'xsum') {
+    const month = $('mMonth').value, rows = state.mgrMonthRows || [];
+    downloadCsv('สรุปเช็กอิน_' + month + '.csv',
+      ['ชื่อ', 'รหัสพนักงาน', 'สาขา', 'วันทำงานตามกะ', 'มาทำงาน', 'สาย (ครั้ง)', 'สายรวม (นาที)', 'ขาด', 'ออกก่อนเวลา (ครั้ง)', 'ลืมออกงาน (ครั้ง)', 'ออกนอกสถานที่ (ครั้ง)', 'หยุด/ลา (วัน)', 'ต้องตรวจสอบ (ครั้ง)'],
+      rows.map((m) => [m.name, m.empId, m.branchName, m.workDays, m.present, m.late, m.lateMin, m.absent, m.early, m.noOut || 0, m.offsite, m.off, m.flags]));
+  } else if (act === 'xall') {
+    btn.disabled = true; const label = btn.textContent; btn.textContent = 'กำลังเตรียมไฟล์…';
+    try {
+      const r = await api('mgrExport', { month: $('mMonth').value });
+      const fb = $('mBranch').value, fbName = fb ? brName(fb) : '';
+      downloadCsv('เช็กอินทั้งหมด_' + r.month + (fb ? '_' + fbName : '') + '.csv', r.header, r.rows.filter((x) => !fb || x[5] === fbName));
+    } catch (e) { mgrErr(e); }
+    btn.disabled = false; btn.textContent = label;
   } else if (act === 'reset') {
     if (!confirm('รีเซ็ตรหัสผ่านของ ' + btn.dataset.name + '?\nรหัสผ่านเดิมจะใช้ไม่ได้ทันที')) return;
     btn.disabled = true;
@@ -1051,11 +1112,15 @@ $('btnBeauty').onclick = () => {
 $('btnSnap').onclick = snap;
 $('btnRetake').onclick = () => { resetPhoto(); openCamera(); };
 $('btnSubmit').onclick = submit;
+$('inComment').addEventListener('input', () => { renderCommentRule(); updateSubmit(); });
 $('btnBack').onclick = loadMain;
 $('selBranch').onchange = () => { renderLoc(); if (state.photo) { resetPhoto(); toast('เปลี่ยนสาขาแล้ว กรุณาถ่ายรูปใหม่', 'info'); } };
 $('segType').onclick = (e) => {
   const b = e.target.closest('button'); if (!b) return;
-  state.type = b.dataset.v; markSeg($('segType'), state.type); renderLoc();
+  if (b.dataset.v === 'in' && state.data && state.data.openShift) {
+    return toast('ต้องกด “ออกงาน” ของรอบก่อนให้เรียบร้อยก่อน จึงจะเข้างานใหม่ได้', 'err');
+  }
+  state.type = b.dataset.v; markSeg($('segType'), state.type); renderLoc(); renderCommentRule();
   if (state.photo) { resetPhoto(); toast('เปลี่ยนประเภทแล้ว กรุณาถ่ายรูปใหม่', 'info'); }
   updateSubmit();
 };
