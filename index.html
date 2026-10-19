@@ -315,6 +315,7 @@
         <input id="mDate" type="date" aria-label="วันที่">
         <input id="mMonth" type="month" class="hidden" aria-label="เดือน">
         <select id="mBranch" aria-label="สาขา"></select>
+        <button id="btnMRefresh" aria-label="รีเฟรช" style="flex:0 0 48px;padding:0">🔄</button>
       </div>
     </div>
     <div id="mgrBody"></div>
@@ -338,7 +339,7 @@ const state = {
   token: null, device: null, data: null, offset: 0,
   type: 'in', position: '', pos: null, watchId: null,
   stream: null, camLabel: '', photo: null, photoAt: 0, busy: false,
-  mode: 'staff', mtoken: null, mgr: null, mgrTab: 'today', mgrFilter: '',
+  mode: 'staff', mtoken: null, mgr: null, mgrTab: 'today', mgrFilter: '', mgrCache: {},
 };
 
 /* ---------- storage (localStorage + cookie สำรอง) ---------- */
@@ -385,19 +386,21 @@ function detectDevice() {
 async function api(action, data) {
   if (!API_URL) throw new Error('ยังไม่ได้ตั้งค่า API_URL ในไฟล์ Index.html');
   const body = JSON.stringify(Object.assign({ action, token: state.token, mtoken: state.mtoken, device: state.device }, data || {}));
-  // เน็ตสะดุด: ลองใหม่อัตโนมัติ 2 ครั้ง (ยกเว้นการส่งเช็กอิน เพื่อไม่ให้บันทึกซ้ำ)
+  // เน็ตสะดุด หรือ Google ตอบกลับผิดพลาด (เช่น HTTP 404): ลองใหม่อัตโนมัติ 2 ครั้ง
+  // ยกเว้นการส่งเช็กอิน เพื่อไม่ให้บันทึกซ้ำ
   const tries = action === 'checkin' ? 1 : 3;
-  let res, lastErr;
-  for (let i = 0; i < tries; i++) {
-    try { res = await fetch(API_URL, { method: 'POST', body, redirect: 'follow' }); break; }
-    catch (e) { lastErr = e; if (i < tries - 1) await new Promise((r) => setTimeout(r, 1500 * (i + 1))); }
+  let j, lastMsg = 'network';
+  for (let i = 0; i < tries && !j; i++) {
+    if (i) await new Promise((r) => setTimeout(r, 1200 * i));
+    try {
+      const res = await fetch(API_URL, { method: 'POST', body, redirect: 'follow', credentials: 'omit', cache: 'no-store' });
+      try { j = await res.json(); } catch (e) { lastMsg = 'HTTP ' + res.status; }
+    } catch (e) { lastMsg = (e && e.message) || 'network'; }
   }
-  if (!res) {
-    const e = new Error('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ (' + ((lastErr && lastErr.message) || 'network') + ')');
+  if (!j) {
+    const e = new Error('เชื่อมต่อเซิร์ฟเวอร์ไม่สำเร็จ (' + lastMsg + ') กรุณาลองใหม่');
     e.code = 'NETWORK'; throw e;
   }
-  let j;
-  try { j = await res.json(); } catch (e) { const x = new Error('เซิร์ฟเวอร์ตอบกลับผิดปกติ (HTTP ' + res.status + ') กรุณาลองใหม่'); x.code = 'NETWORK'; throw x; }
   if (j.serverTime) state.offset = j.serverTime - Date.now();
   if (!j.ok) { const e = new Error(j.error || 'เกิดข้อผิดพลาด'); e.code = j.code; throw e; }
   return j;
@@ -918,6 +921,7 @@ async function loadMgr(date) {
   if (!$('mDate').value) $('mDate').value = todayStr();
   if (!$('mMonth').value) $('mMonth').value = todayStr().slice(0, 7);
   if (!state.mgr) show('vLoading');
+  else if (state.mgrTab === 'today') $('mgrBody').innerHTML = '<div class="empty">กำลังโหลด…</div>';
   try {
     const d = await api('mgrDashboard', { date: date || $('mDate').value });
     state.mgr = d;
@@ -933,6 +937,14 @@ async function loadMgr(date) {
     if (e.code === 'NETWORK') return showNet(e.message, () => loadMgr(date));
     mgrErr(e);
   }
+}
+/** แคชฝั่งมือถือ 60 วินาที: สลับแท็บไปมาไม่ต้องโหลดใหม่ */
+async function mgrGet(action, data, key) {
+  const hit = state.mgrCache[key];
+  if (hit && Date.now() - hit.at < 60000) return hit.data;
+  const r = await api(action, data);
+  state.mgrCache[key] = { at: Date.now(), data: r };
+  return r;
 }
 function brName(id) { const b = state.mgr && state.mgr.branches.find((x) => x.id === id); return b ? b.name : id; }
 function renderMgr() {
@@ -980,7 +992,7 @@ function renderMgrToday() {
 }
 async function loadMgrCheckins() {
   try {
-    const r = await api('mgrCheckins', { date: $('mDate').value });
+    const r = await mgrGet('mgrCheckins', { date: $('mDate').value }, 'ci:' + $('mDate').value);
     if (state.mgrTab !== 'checkins') return;
     const fb = $('mBranch').value, fbName = fb ? brName(fb) : '';
     const list = r.checkins.filter((c) => !fb || c.branchName === fbName);
@@ -998,7 +1010,7 @@ async function loadMgrCheckins() {
 }
 async function loadMgrMonth() {
   try {
-    const r = await api('mgrMonth', { month: $('mMonth').value });
+    const r = await mgrGet('mgrMonth', { month: $('mMonth').value }, 'mo:' + $('mMonth').value);
     if (state.mgrTab !== 'month') return;
     const fb = $('mBranch').value;
     const rows = r.rows.filter((m) => !fb || m.branch === fb);
@@ -1045,7 +1057,7 @@ async function mgrAction(btn) {
     const branch = status === 'BRANCH_PC' ? document.querySelector(`[data-pcfor="${btn.dataset.id}"]`).value : '';
     if (status === 'BLOCKED' && !confirm('ระงับอุปกรณ์นี้?')) return;
     btn.disabled = true;
-    try { await api('mgrDevice', { deviceId: btn.dataset.id, status, branch }); toast('บันทึกแล้ว', 'ok'); await loadMgr(); }
+    try { await api('mgrDevice', { deviceId: btn.dataset.id, status, branch }); toast('บันทึกแล้ว', 'ok'); state.mgrCache = {}; await loadMgr(); }
     catch (e) { mgrErr(e); btn.disabled = false; }
   } else if (act === 'xsum') {
     const month = $('mMonth').value, rows = state.mgrMonthRows || [];
@@ -1094,6 +1106,7 @@ $('inMPw').addEventListener('keydown', (e) => { if (e.key === 'Enter') mgrLogin(
 $('btnMSetPw').onclick = mgrSetPw;
 $('mgrTabs').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; state.mgrTab = b.dataset.v; renderMgr(); };
 $('mDate').onchange = () => loadMgr($('mDate').value);
+$('btnMRefresh').onclick = () => { state.mgrCache = {}; loadMgr($('mDate').value); };
 $('mMonth').onchange = () => renderMgr();
 $('mBranch').onchange = () => renderMgr();
 $('mgrBody').addEventListener('click', (e) => {
