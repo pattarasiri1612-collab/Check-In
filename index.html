@@ -112,6 +112,10 @@
   .tile { background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 12px 8px; text-align: center; box-shadow: var(--shadow); }
   .tile b { display: block; font-family: 'Prompt', sans-serif; font-size: 26px; line-height: 1.1; }
   .tile span { font-size: 12px; color: var(--muted); }
+  button.tile { font: inherit; width: 100%; cursor: pointer; }
+  .tile.on { border-color: var(--brand); box-shadow: 0 0 0 2.5px var(--brand) inset, var(--shadow); background: var(--brand-soft); }
+  .filterBar { display: flex; justify-content: space-between; align-items: center; margin: -4px 2px 10px; font-size: 14px; color: var(--brand); font-weight: 600; }
+  .flagBox { margin-top: 10px; background: var(--err-bg); color: var(--err); border-radius: 12px; padding: 8px 12px; font-size: 13px; line-height: 1.5; }
   .tile.ok b { color: var(--ok); } .tile.late b { color: var(--warn); } .tile.bad b { color: var(--err); } .tile.off b { color: #3949ab; }
   .item { background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 12px 14px; margin-bottom: 8px; box-shadow: var(--shadow); }
   .item .top { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
@@ -322,7 +326,7 @@ const state = {
   token: null, device: null, data: null, offset: 0,
   type: 'in', position: '', pos: null, watchId: null,
   stream: null, camLabel: '', photo: null, photoAt: 0, busy: false,
-  mode: 'staff', mtoken: null, mgr: null, mgrTab: 'today',
+  mode: 'staff', mtoken: null, mgr: null, mgrTab: 'today', mgrFilter: '',
 };
 
 /* ---------- storage (localStorage + cookie สำรอง) ---------- */
@@ -909,27 +913,34 @@ function renderMgr() {
   if (tab === 'checkins') return loadMgrCheckins();
   if (tab === 'month') return loadMgrMonth();
 }
+const MGR_FILTERS = {
+  came: { label: 'มาแล้ว', f: (p) => p.tone === 'ok' || p.tone === 'late' },
+  late: { label: 'สาย', f: (p) => p.tone === 'late' },
+  missing: { label: 'ยังไม่มา/ขาด', f: (p) => p.tone === 'missing' || p.tone === 'absent' },
+  off: { label: 'หยุด/ลา', f: (p) => p.tone === 'off' },
+  early: { label: 'ออกก่อนเวลา', f: (p) => p.early > 0 },
+  flags: { label: 'ต้องตรวจสอบ', f: (p) => p.flags > 0 },
+};
 function renderMgrToday() {
   const fb = $('mBranch').value;
   const ppl = state.mgr.people.filter((p) => !fb || p.branch === fb);
-  const n = (f) => ppl.filter(f).length;
+  const n = (k) => ppl.filter(MGR_FILTERS[k].f).length;
+  const cur = state.mgrFilter && MGR_FILTERS[state.mgrFilter] ? state.mgrFilter : '';
+  const tile = (k, cls) => `<button class="tile ${cls}${cur === k ? ' on' : ''}" data-filter="${k}"><b>${n(k)}</b><span>${MGR_FILTERS[k].label}</span></button>`;
   const order = { missing: 0, absent: 1, late: 2, none: 3, ok: 4, off: 5 };
-  const sorted = ppl.slice().sort((a, b) => (order[a.tone] - order[b.tone]) || a.name.localeCompare(b.name, 'th'));
-  $('mgrBody').innerHTML = `<div class="tiles">
-      <div class="tile ok"><b>${n((p) => p.tone === 'ok' || p.tone === 'late')}</b><span>มาแล้ว</span></div>
-      <div class="tile late"><b>${n((p) => p.tone === 'late')}</b><span>สาย</span></div>
-      <div class="tile bad"><b>${n((p) => p.tone === 'missing' || p.tone === 'absent')}</b><span>ยังไม่มา/ขาด</span></div>
-      <div class="tile off"><b>${n((p) => p.tone === 'off')}</b><span>หยุด/ลา</span></div>
-      <div class="tile late"><b>${n((p) => p.early > 0)}</b><span>ออกก่อนเวลา</span></div>
-      <div class="tile bad"><b>${n((p) => p.flags > 0)}</b><span>ต้องตรวจสอบ</span></div>
-    </div>` + (sorted.length ? sorted.map((p) => `<div class="item">
+  const shown = ppl.filter((p) => !cur || MGR_FILTERS[cur].f(p))
+    .sort((a, b) => (order[a.tone] - order[b.tone]) || a.name.localeCompare(b.name, 'th'));
+  $('mgrBody').innerHTML = `<div class="tiles">${tile('came', 'ok')}${tile('late', 'late')}${tile('missing', 'bad')}${tile('off', 'off')}${tile('early', 'late')}${tile('flags', 'bad')}</div>` +
+    (cur ? `<div class="filterBar"><span>แสดงเฉพาะ: ${MGR_FILTERS[cur].label} (${shown.length} คน)</span><button class="link" data-filter="">ดูทั้งหมด ✕</button></div>` : '') +
+    (shown.length ? shown.map((p) => `<div class="item">
       <div class="top"><span class="name">${esc(p.name)}</span><span class="pill ${p.tone}">${esc(p.status)}</span></div>
       <div class="sub">${esc(p.branchName)} · ${esc(p.position || '')}${p.shift ? ' · กะ ' + esc(p.shift) : ''}</div>
       <div class="grid4"><div>เข้า<b>${esc(p.in || '—')}</b></div><div>ออก<b>${esc(p.out || '—')}</b></div>
         <div>ออกก่อน<b>${p.early ? p.early + "'" : '—'}</b></div><div>ตรวจสอบ<b>${p.flags || '—'}</b></div></div>
       ${p.outNote || (p.inBranch && p.inBranch !== p.branchName) ? `<div class="sub">${p.outNote ? '📍 ออกงานนอกสถานที่ ' : ''}${p.inBranch && p.inBranch !== p.branchName ? '· เข้างานที่ ' + esc(p.inBranch) : ''}</div>` : ''}
+      ${p.flags && p.flagNotes && p.flagNotes.length ? `<div class="flagBox">⚠️ ต้องตรวจสอบเพราะ<br>${p.flagNotes.map(esc).join('<br>')}</div>` : ''}
       <div class="acts"><button data-act="reset" data-email="${esc(p.email)}" data-name="${esc(p.name)}">🔑 รีเซ็ตรหัสผ่าน</button></div>
-    </div>`).join('') : '<div class="empty">ไม่มีพนักงานในเงื่อนไขนี้</div>');
+    </div>`).join('') : '<div class="empty">ไม่มีพนักงานในกลุ่มนี้</div>');
 }
 async function loadMgrCheckins() {
   try {
@@ -1024,7 +1035,11 @@ $('mgrTabs').onclick = (e) => { const b = e.target.closest('button'); if (!b) re
 $('mDate').onchange = () => loadMgr($('mDate').value);
 $('mMonth').onchange = () => renderMgr();
 $('mBranch').onchange = () => renderMgr();
-$('mgrBody').addEventListener('click', (e) => { const b = e.target.closest('button[data-act]'); if (b) mgrAction(b); });
+$('mgrBody').addEventListener('click', (e) => {
+  const f = e.target.closest('[data-filter]');
+  if (f) { state.mgrFilter = f.dataset.filter === state.mgrFilter ? '' : f.dataset.filter; renderMgrToday(); return; }
+  const b = e.target.closest('button[data-act]'); if (b) mgrAction(b);
+});
 $('modalClose').onclick = () => $('modal').classList.add('hidden');
 $('modal').addEventListener('click', (e) => { if (e.target.id === 'modal') $('modal').classList.add('hidden'); });
 $('btnLoc').onclick = startLocation;
