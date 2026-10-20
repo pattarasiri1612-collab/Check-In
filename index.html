@@ -75,8 +75,9 @@
   .cam video, .cam img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .cam video { transform: scaleX(-1); }
   /* ฟิลเตอร์ขาวใสเนียน (พรีวิว) — ตอนถ่ายจริงใช้สูตรเดียวกันบน canvas */
-  .cam canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
-  .cam video.ghost { opacity: 0; }
+  .cam.beauty #video { filter: brightness(1.14) contrast(1.06) saturate(0.97); }
+  .cam #videoSoft { position: absolute; inset: 0; filter: blur(4px) brightness(1.14) contrast(1.06); opacity: .12; pointer-events: none; }
+  .cam .tint { position: absolute; inset: 0; background: rgba(255, 225, 235, .06); mix-blend-mode: soft-light; pointer-events: none; }
   .beautyBar { display: flex; justify-content: flex-end; margin-bottom: 8px; }
   .beautyBtn { padding: 7px 14px; border-radius: 999px; font-size: 14px; background: #eef4f3; border: none; color: var(--muted); }
   .beautyBtn.on { background: #ffe9f1; color: #b0306a; }
@@ -225,10 +226,11 @@
     <div class="card">
       <h3><span class="num">4</span> ถ่ายเซลฟี่ (กล้องสดเท่านั้น)</h3>
       <div class="challenge">ในรูปให้ <b id="gesture"></b> &nbsp;·&nbsp; รหัส <b id="chCode"></b></div>
-      <div class="beautyBar"><button id="btnBeauty" class="beautyBtn">✨ ฟิลเตอร์: สดใส</button></div>
+      <div class="beautyBar"><button id="btnBeauty" class="beautyBtn">✨ ขาวใสเนียน</button></div>
       <div class="cam" id="camBox">
         <video id="video" playsinline muted autoplay class="hidden"></video>
-        <canvas id="camView" class="hidden"></canvas>
+        <video id="videoSoft" playsinline muted autoplay class="hidden"></video>
+        <div id="tint" class="tint hidden"></div>
         <img id="shot" class="hidden" alt="เซลฟี่ที่ถ่าย">
         <div class="camMsg" id="camMsg">กดปุ่ม “เปิดกล้อง” แล้วอนุญาตให้ใช้กล้อง</div>
       </div>
@@ -692,13 +694,15 @@ async function openCamera() {
   stopCamera();
   msg.textContent = 'กำลังเปิดกล้อง…'; msg.classList.remove('hidden');
   try {
-    const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 1080 }, height: { ideal: 1440 } }, audio: false });
+    const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 960 }, height: { ideal: 1280 } }, audio: false });
     state.stream = s;
     const track = s.getVideoTracks()[0];
     state.camLabel = (track && track.label) || '';
     const v = $('video');
     v.srcObject = s; v.classList.remove('hidden');
+    $('videoSoft').srcObject = s;
     await v.play().catch(() => {});
+    $('videoSoft').play().catch(() => {});
     applyBeauty();
     msg.classList.add('hidden'); $('shot').classList.add('hidden');
     $('btnCam').classList.add('hidden'); $('btnSnap').classList.remove('hidden'); $('btnRetake').classList.add('hidden');
@@ -709,132 +713,57 @@ async function openCamera() {
   }
 }
 function stopCamera() {
-  stopPreview();
   if (state.stream) state.stream.getTracks().forEach((t) => t.stop());
   state.stream = null;
   $('video').srcObject = null;
-  $('video').classList.remove('ghost');
-  $('camView').classList.add('hidden');
+  $('videoSoft').srcObject = null;
+  $('videoSoft').classList.add('hidden'); $('tint').classList.add('hidden');
 }
-
-/* ---------- ฟิลเตอร์ "สดใส": 3 ระดับ (ปิด / ธรรมชาติ / สดใส) จำค่าไว้ในเครื่อง ---------- */
-const BEAUTY_LEVELS = [{ name: 'ปิด', st: 0 }, { name: 'ธรรมชาติ', st: 0.55 }, { name: 'สดใส', st: 1 }];
+/* ฟิลเตอร์ขาวใสเนียน: เปิด/ปิดได้ จำค่าไว้ในเครื่อง */
 function applyBeauty() {
-  const lv = BEAUTY_LEVELS[state.beauty] || BEAUTY_LEVELS[2];
-  $('btnBeauty').classList.toggle('on', state.beauty > 0);
-  $('btnBeauty').textContent = '✨ ฟิลเตอร์: ' + lv.name;
-  if (state.stream && !$('video').classList.contains('hidden')) startPreview();
+  const on = state.beauty, live = !!state.stream && !$('video').classList.contains('hidden');
+  $('camBox').classList.toggle('beauty', on);
+  $('btnBeauty').classList.toggle('on', on);
+  $('btnBeauty').textContent = on ? '✨ ขาวใสเนียน: เปิด' : '✨ ขาวใสเนียน: ปิด';
+  $('videoSoft').classList.toggle('hidden', !(on && live));
+  $('tint').classList.toggle('hidden', !(on && live));
 }
-// พรีวิวสดผ่านฟิลเตอร์เดียวกับตอนถ่าย จึงเห็นผลจริงก่อนกดถ่าย (~15 ภาพ/วินาที)
-const PREV = { raf: 0, last: 0 };
-function startPreview() {
-  stopPreview();
-  const v = $('video'), c = $('camView');
-  if (!state.beauty || !state.stream) { c.classList.add('hidden'); v.classList.remove('ghost'); return; }
-  c.classList.remove('hidden'); v.classList.add('ghost');
-  const ctx = c.getContext('2d', { willReadFrequently: true });
-  const tick = (t) => {
-    PREV.raf = requestAnimationFrame(tick);
-    if (t - PREV.last < 90 || !v.videoWidth) return;
-    PREV.last = t;
-    const sc = Math.min(1, 640 / Math.max(v.videoWidth, v.videoHeight));
-    const w = Math.round(v.videoWidth * sc), h = Math.round(v.videoHeight * sc);
-    if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
-    ctx.save(); ctx.translate(w, 0); ctx.scale(-1, 1); ctx.drawImage(v, 0, 0, w, h); ctx.restore();
-    beautify(ctx, c, w, h, BEAUTY_LEVELS[state.beauty].st);
-  };
-  PREV.raf = requestAnimationFrame(tick);
-}
-function stopPreview() { if (PREV.raf) cancelAnimationFrame(PREV.raf); PREV.raf = 0; }
-
-const TMP = {};
-function tmpCanvas(k, w, h) {
-  const c = TMP[k] || (TMP[k] = document.createElement('canvas'));
-  if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
-  return c;
-}
-function sstep(x, a, b) { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); }
-/**
- * ฟิลเตอร์หน้าสดใส (ทำงานในเครื่อง ไม่ส่งภาพไปที่อื่น)
- * 1) หาส่วนที่เป็นผิว (YCbCr) 2) ปรับแสงอัตโนมัติให้หน้าสว่างพอดี ไม่คล้ำ ไม่ขาวซีด
- * 3) ลบรอยสิว/จุดด่างดำ + เกลี่ยผิว เฉพาะผิว 4) ส่วนอื่น (ตา คิ้ว ผม) เพิ่มความคมชัด กันภาพมัว
- * 5) แก้มและปากอมชมพู 6) ผิวขาวอมชมพู คงความอิ่มสี
- */
-function beautify(ctx, src, w, h, st) {
-  st = st == null ? 1 : st;
-  if (st <= 0) return;
-  const sw = Math.max(8, Math.round(w / 9)), sh = Math.max(8, Math.round(h / 9));
-  const sm = tmpCanvas('sm', sw, sh), sx = sm.getContext('2d');
-  sx.imageSmoothingEnabled = true; sx.imageSmoothingQuality = 'high'; sx.drawImage(src, 0, 0, sw, sh);
-  const bl = tmpCanvas('bl', w, h), bx = bl.getContext('2d', { willReadFrequently: true });
-  bx.imageSmoothingEnabled = true; bx.imageSmoothingQuality = 'high'; bx.drawImage(sm, 0, 0, w, h);
-  const soft = bx.getImageData(0, 0, w, h).data;
-  const img = ctx.getImageData(0, 0, w, h), px = img.data, n = w * h;
-  const mask = new Float32Array(n), crs = new Float32Array(n);
-  let sumY = 0, sumCr = 0, cnt = 0;
-  for (let p = 0, i = 0; p < n; p++, i += 4) {
-    const r = px[i], g = px[i + 1], b = px[i + 2];
-    const Y = 0.299 * r + 0.587 * g + 0.114 * b;
-    const Cb = 128 - 0.1687 * r - 0.3313 * g + 0.5 * b, Cr = 128 + 0.5 * r - 0.4187 * g - 0.0813 * b;
-    const m = sstep(Cr, 133, 141) * (1 - sstep(Cr, 170, 182)) * sstep(Cb, 74, 82) * (1 - sstep(Cb, 124, 132)) * sstep(Y, 45, 75);
-    mask[p] = m; crs[p] = Cr;
-    if (m > 0.6) { sumY += Y; sumCr += Cr; cnt++; }
+// ตารางปรับโทน: ยกมิดโทนให้สว่าง (gamma) แต่คงสีดำไว้ แล้วเพิ่มคอนทราสต์เล็กน้อย จึงขาวขึ้นโดยไม่มัว
+const BEAUTY_LUT = (() => {
+  const t = new Uint8ClampedArray(256);
+  for (let i = 0; i < 256; i++) {
+    const g = 255 * Math.pow(i / 255, 0.78);          // สว่างขึ้นช่วงผิว
+    t[i] = (g - 128) * 1.08 + 128;                    // คอนทราสต์ +8% กันภาพจาง
   }
-  const meanY = cnt > n * 0.01 ? sumY / cnt : 140, meanCr = cnt ? sumCr / cnt : 150;
-  // ปรับแสงอัตโนมัติ: ให้ผิวหน้าสว่างราว 185/255 (สดใส ไม่ซีด) หน้าคล้ำ/ห้องมืดจะถูกยกขึ้นมากกว่า
-  let gam = Math.log(170 / 255) / Math.log(Math.min(250, Math.max(40, meanY)) / 255);
-  gam = Math.min(1, Math.max(0.68, gam));
-  const lift = (1 - gam) * st;                       // ยิ่งห้องมืด ยิ่งยกแสงมาก
-  // ผิว: ยกแสงเต็มที่ · ส่วนอื่น: ยกครึ่งเดียว · สีเข้ม (ผม คิ้ว ตา) แทบไม่ยก จึงไม่เป็นสีเทามัว
-  const mkLut = (amt) => {
-    const t = new Uint8ClampedArray(256), gm = 1 - amt, con = 1 + 0.08 * st;
-    for (let k = 0; k < 256; k++) {
-      const up = 255 * Math.pow(k / 255, gm), keep = sstep(k, 25, 110);
-      t[k] = ((k + (up - k) * keep) - 128) * con + 128;
-    }
-    return t;
-  };
-  const lutSkin = mkLut(lift), lutBg = mkLut(lift * 0.5);
-  const cx = w * 0.5, cy = h * 0.42, rad = Math.min(w, h) * 0.55;
-  const ix = (v) => (v < 0 ? 0 : v > 255 ? 255 : v | 0);
-  for (let p = 0, i = 0; p < n; p++, i += 4) {
+  return t;
+})();
+function beautify(ctx, src, w, h) {
+  // ภาพเบลอสำหรับทำผิวเนียน (ย่อแล้วขยาย)
+  const sm = document.createElement('canvas');
+  sm.width = Math.max(1, Math.round(w / 5)); sm.height = Math.max(1, Math.round(h / 5));
+  sm.getContext('2d').drawImage(src, 0, 0, sm.width, sm.height);
+  const bl = document.createElement('canvas'); bl.width = w; bl.height = h;
+  const bx = bl.getContext('2d'); bx.imageSmoothingEnabled = true; bx.imageSmoothingQuality = 'high';
+  bx.drawImage(sm, 0, 0, w, h);
+  const soft = bx.getImageData(0, 0, w, h).data;
+  const img = ctx.getImageData(0, 0, w, h), px = img.data;
+  for (let i = 0; i < px.length; i += 4) {
     let r = px[i], g = px[i + 1], b = px[i + 2];
-    const rs = soft[i], gs = soft[i + 1], bs = soft[i + 2], mk = mask[p], m = mk * st;
-    if (m > 0.01) {
-      // เกลี่ยเฉพาะผิวที่เรียบ (ต่างจากรอบข้างน้อย) ขอบจมูก ปาก รูปหน้า ยังคมชัด
-      const yo = 0.299 * r + 0.587 * g + 0.114 * b, ys = 0.299 * rs + 0.587 * gs + 0.114 * bs, d = ys - yo;
-      // รอยสิว/จุดด่างดำ = จุดเล็กที่มืดกว่าผิวรอบข้างเล็กน้อย → ยกให้เสมอกัน
-      const spot = 0.95 * m * sstep(d, 3, 10) * (1 - sstep(d, 40, 64));
-      r += (rs - r) * spot; g += (gs - g) * spot; b += (bs - b) * spot;
-      const a = 0.45 * m * (1 - sstep(Math.abs(d), 10, 32));
-      r += (rs - r) * a; g += (gs - g) * a; b += (bs - b) * a;
-    } else {
-      // ตา คิ้ว ผม ฉากหลัง: เพิ่มความคมชัด ภาพจึงไม่มัว
-      const k = 0.35 * st; r += (r - rs) * k; g += (g - gs) * k; b += (b - bs) * k;
+    // 1) ผิวเนียน: เกลี่ยเฉพาะพิกเซลที่เป็นสีผิว ผม ตา และฉากหลังยังคมชัด จึงไม่มัว
+    if (r > 95 && g > 40 && b > 20 && r > g && r > b && r - g > 12 && r - b > 15) {
+      r = r * 0.45 + soft[i] * 0.55; g = g * 0.45 + soft[i + 1] * 0.55; b = b * 0.45 + soft[i + 2] * 0.55;
     }
-    const L = mk > 0.5 ? lutSkin : lutBg;
-    r = L[ix(r)]; g = L[ix(g)]; b = L[ix(b)];
-    if (mk > 0.01) {
-      // ผิวขาวอมชมพู + เติมความอิ่มสีตามแสงที่ยก (กันหน้าซีด)
-      const avg = (r + g + b) / 3, sat = 1 + (0.10 + 0.10 * lift) * m;
-      // ห้องมืดยิ่งยกแสง ยิ่งเติมโทนชมพู-ฟ้าอ่อน กันหน้าออกส้ม
-      r = avg + (r - avg) * sat + 2 * m; g = avg + (g - avg) * sat + 2 * lift * m; b = avg + (b - avg) * sat + (3 + 12 * lift) * m;
-    }
-    // แก้มและปากอมชมพู: บริเวณกลางภาพที่แดงกว่าผิวเฉลี่ย
-    const dx = ((p % w) - cx) / rad, dy = (((p / w) | 0) - cy) / rad, cw = Math.max(0, 1 - (dx * dx + dy * dy));
-    if (cw > 0) {
-      const red = Math.min(1, Math.max(0, (crs[p] - meanCr) / 14));
-      const pink = Math.min(1, (red + 0.10 * mk) * cw) * st;
-      r += 16 * pink; g -= 3 * pink; b += 9 * pink;
-    }
-    px[i] = r; px[i + 1] = g; px[i + 2] = b;
+    // 2) ขาวใส: ยกมิดโทนแต่คงสีดำ + อมชมพูเล็กน้อยเฉพาะส่วนสว่าง
+    r = BEAUTY_LUT[r | 0]; g = BEAUTY_LUT[g | 0]; b = BEAUTY_LUT[b | 0];
+    const k = (r + g + g + b) / 1020;
+    px[i] = r + 6 * k; px[i + 1] = g + 1 * k; px[i + 2] = b + 7 * k;
   }
   ctx.putImageData(img, 0, 0);
 }
 function snap() {
   const v = $('video');
   if (!v.videoWidth) return toast('กล้องยังไม่พร้อม รอสักครู่', 'err');
-  const scale = Math.min(1, 1080 / Math.max(v.videoWidth, v.videoHeight));   // รูปละเอียดขึ้น คมขึ้น
+  const scale = Math.min(1, 960 / Math.max(v.videoWidth, v.videoHeight));
   const w = Math.round(v.videoWidth * scale), h = Math.round(v.videoHeight * scale);
   const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
   const ctx = cv.getContext('2d');
@@ -842,7 +771,7 @@ function snap() {
   ctx.save(); ctx.translate(w, 0); ctx.scale(-1, 1);
   ctx.drawImage(v, 0, 0, w, h);
   ctx.restore();
-  if (state.beauty) beautify(ctx, cv, w, h, BEAUTY_LEVELS[state.beauty].st);
+  if (state.beauty) beautify(ctx, cv, w, h);
 
   // ลายน้ำ: ชื่อ / สาขา / เวลาเซิร์ฟเวอร์ / รหัสยืนยัน
   const d = state.data, br = selectedBranch(), now = serverNow();
@@ -857,7 +786,7 @@ function snap() {
   ctx.fillStyle = '#fff'; ctx.font = `600 ${fs}px Sarabun, sans-serif`; ctx.textBaseline = 'top';
   lines.forEach((t, i) => ctx.fillText(t, pad, h - boxH + pad + i * lh, w - pad * 2));
 
-  state.photo = cv.toDataURL('image/jpeg', 0.86);
+  state.photo = cv.toDataURL('image/jpeg', 0.82);
   state.photoAt = Date.now();
   $('shot').src = state.photo; $('shot').classList.remove('hidden');
   v.classList.add('hidden'); stopCamera();
@@ -901,7 +830,7 @@ async function submit() {
     location: p ? { lat: p.lat, lng: p.lng, accuracy: p.accuracy, ageMs: Date.now() - p.at } : null,
     photo: state.photo, challengeCode: state.data.challenge.code, clientTime: Date.now(),
     comment: $('inComment').value.trim().slice(0, 300),
-    camera: { source: 'live', label: state.camLabel, filter: (BEAUTY_LEVELS[state.beauty] || {}).name || 'ปิด' },
+    camera: { source: 'live', label: state.camLabel, filter: state.beauty ? 'beauty' : 'none' },
   };
   try {
     const r = await api('checkin', { payload });
@@ -1199,8 +1128,7 @@ $('modal').addEventListener('click', (e) => { if (e.target.id === 'modal') $('mo
 $('btnLoc').onclick = startLocation;
 $('btnCam').onclick = openCamera;
 $('btnBeauty').onclick = () => {
-  state.beauty = (state.beauty + 2) % 3;   // สดใส → ธรรมชาติ → ปิด → สดใส
-  store.set('ci_beauty2', String(state.beauty)); applyBeauty();
+  state.beauty = !state.beauty; store.set('ci_beauty', state.beauty ? '1' : '0'); applyBeauty();
   if (state.photo) { resetPhoto(); toast('เปลี่ยนฟิลเตอร์แล้ว กรุณาถ่ายรูปใหม่', 'info'); }
 };
 $('btnSnap').onclick = snap;
@@ -1233,8 +1161,7 @@ document.addEventListener('visibilitychange', () => {
 /* ---------- Start ---------- */
 (function init() {
   state.device = detectDevice();
-  const bv = store.get('ci_beauty2');
-  state.beauty = /^[012]$/.test(bv || '') ? Number(bv) : 2;  // ค่าเริ่มต้น: สดใส
+  state.beauty = store.get('ci_beauty') !== '0';  // ค่าเริ่มต้น: เปิด
   applyBeauty();
   state.token = store.get('ci_token');
   state.mtoken = store.get('ci_mtoken');
