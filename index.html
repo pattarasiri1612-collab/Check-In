@@ -692,7 +692,7 @@ async function openCamera() {
   stopCamera();
   msg.textContent = 'กำลังเปิดกล้อง…'; msg.classList.remove('hidden');
   try {
-    const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 960 }, height: { ideal: 1280 } }, audio: false });
+    const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 1080 }, height: { ideal: 1440 } }, audio: false });
     state.stream = s;
     const track = s.getVideoTracks()[0];
     state.camLabel = (track && track.label) || '';
@@ -735,9 +735,9 @@ function startPreview() {
   const ctx = c.getContext('2d', { willReadFrequently: true });
   const tick = (t) => {
     PREV.raf = requestAnimationFrame(tick);
-    if (t - PREV.last < 66 || !v.videoWidth) return;
+    if (t - PREV.last < 90 || !v.videoWidth) return;
     PREV.last = t;
-    const sc = Math.min(1, 400 / Math.max(v.videoWidth, v.videoHeight));
+    const sc = Math.min(1, 640 / Math.max(v.videoWidth, v.videoHeight));
     const w = Math.round(v.videoWidth * sc), h = Math.round(v.videoHeight * sc);
     if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
     ctx.save(); ctx.translate(w, 0); ctx.scale(-1, 1); ctx.drawImage(v, 0, 0, w, h); ctx.restore();
@@ -763,7 +763,7 @@ function sstep(x, a, b) { const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
 function beautify(ctx, src, w, h, st) {
   st = st == null ? 1 : st;
   if (st <= 0) return;
-  const sw = Math.max(8, Math.round(w / 6)), sh = Math.max(8, Math.round(h / 6));
+  const sw = Math.max(8, Math.round(w / 9)), sh = Math.max(8, Math.round(h / 9));
   const sm = tmpCanvas('sm', sw, sh), sx = sm.getContext('2d');
   sx.imageSmoothingEnabled = true; sx.imageSmoothingQuality = 'high'; sx.drawImage(src, 0, 0, sw, sh);
   const bl = tmpCanvas('bl', w, h), bx = bl.getContext('2d', { willReadFrequently: true });
@@ -782,8 +782,8 @@ function beautify(ctx, src, w, h, st) {
   }
   const meanY = cnt > n * 0.01 ? sumY / cnt : 140, meanCr = cnt ? sumCr / cnt : 150;
   // ปรับแสงอัตโนมัติ: ให้ผิวหน้าสว่างราว 185/255 (สดใส ไม่ซีด) หน้าคล้ำ/ห้องมืดจะถูกยกขึ้นมากกว่า
-  let gam = Math.log(185 / 255) / Math.log(Math.min(250, Math.max(40, meanY)) / 255);
-  gam = Math.min(1, Math.max(0.55, gam));
+  let gam = Math.log(170 / 255) / Math.log(Math.min(250, Math.max(40, meanY)) / 255);
+  gam = Math.min(1, Math.max(0.68, gam));
   const lift = (1 - gam) * st;                       // ยิ่งห้องมืด ยิ่งยกแสงมาก
   // ผิว: ยกแสงเต็มที่ · ส่วนอื่น: ยกครึ่งเดียว · สีเข้ม (ผม คิ้ว ตา) แทบไม่ยก จึงไม่เป็นสีเทามัว
   const mkLut = (amt) => {
@@ -801,9 +801,13 @@ function beautify(ctx, src, w, h, st) {
     let r = px[i], g = px[i + 1], b = px[i + 2];
     const rs = soft[i], gs = soft[i + 1], bs = soft[i + 2], mk = mask[p], m = mk * st;
     if (m > 0.01) {
-      // ลบรอยสิว/จุดด่างดำ: จุดที่มืดกว่าผิวรอบข้างถูกยกให้เรียบเสมอกัน
-      r += Math.max(0, rs - r) * 0.85 * m; g += Math.max(0, gs - g) * 0.85 * m; b += Math.max(0, bs - b) * 0.85 * m;
-      const a = 0.55 * m; r += (rs - r) * a; g += (gs - g) * a; b += (bs - b) * a;
+      // เกลี่ยเฉพาะผิวที่เรียบ (ต่างจากรอบข้างน้อย) ขอบจมูก ปาก รูปหน้า ยังคมชัด
+      const yo = 0.299 * r + 0.587 * g + 0.114 * b, ys = 0.299 * rs + 0.587 * gs + 0.114 * bs, d = ys - yo;
+      // รอยสิว/จุดด่างดำ = จุดเล็กที่มืดกว่าผิวรอบข้างเล็กน้อย → ยกให้เสมอกัน
+      const spot = 0.95 * m * sstep(d, 3, 10) * (1 - sstep(d, 40, 64));
+      r += (rs - r) * spot; g += (gs - g) * spot; b += (bs - b) * spot;
+      const a = 0.45 * m * (1 - sstep(Math.abs(d), 10, 32));
+      r += (rs - r) * a; g += (gs - g) * a; b += (bs - b) * a;
     } else {
       // ตา คิ้ว ผม ฉากหลัง: เพิ่มความคมชัด ภาพจึงไม่มัว
       const k = 0.35 * st; r += (r - rs) * k; g += (g - gs) * k; b += (b - bs) * k;
@@ -814,13 +818,13 @@ function beautify(ctx, src, w, h, st) {
       // ผิวขาวอมชมพู + เติมความอิ่มสีตามแสงที่ยก (กันหน้าซีด)
       const avg = (r + g + b) / 3, sat = 1 + (0.10 + 0.10 * lift) * m;
       // ห้องมืดยิ่งยกแสง ยิ่งเติมโทนชมพู-ฟ้าอ่อน กันหน้าออกส้ม
-      r = avg + (r - avg) * sat + 2 * m; g = avg + (g - avg) * sat + 2 * lift * m; b = avg + (b - avg) * sat + (5 + 14 * lift) * m;
+      r = avg + (r - avg) * sat + 2 * m; g = avg + (g - avg) * sat + 2 * lift * m; b = avg + (b - avg) * sat + (3 + 12 * lift) * m;
     }
     // แก้มและปากอมชมพู: บริเวณกลางภาพที่แดงกว่าผิวเฉลี่ย
     const dx = ((p % w) - cx) / rad, dy = (((p / w) | 0) - cy) / rad, cw = Math.max(0, 1 - (dx * dx + dy * dy));
     if (cw > 0) {
       const red = Math.min(1, Math.max(0, (crs[p] - meanCr) / 14));
-      const pink = Math.min(1, (red + 0.15 * mk) * cw) * st;
+      const pink = Math.min(1, (red + 0.10 * mk) * cw) * st;
       r += 16 * pink; g -= 3 * pink; b += 9 * pink;
     }
     px[i] = r; px[i + 1] = g; px[i + 2] = b;
@@ -830,7 +834,7 @@ function beautify(ctx, src, w, h, st) {
 function snap() {
   const v = $('video');
   if (!v.videoWidth) return toast('กล้องยังไม่พร้อม รอสักครู่', 'err');
-  const scale = Math.min(1, 960 / Math.max(v.videoWidth, v.videoHeight));
+  const scale = Math.min(1, 1080 / Math.max(v.videoWidth, v.videoHeight));   // รูปละเอียดขึ้น คมขึ้น
   const w = Math.round(v.videoWidth * scale), h = Math.round(v.videoHeight * scale);
   const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
   const ctx = cv.getContext('2d');
@@ -853,7 +857,7 @@ function snap() {
   ctx.fillStyle = '#fff'; ctx.font = `600 ${fs}px Sarabun, sans-serif`; ctx.textBaseline = 'top';
   lines.forEach((t, i) => ctx.fillText(t, pad, h - boxH + pad + i * lh, w - pad * 2));
 
-  state.photo = cv.toDataURL('image/jpeg', 0.82);
+  state.photo = cv.toDataURL('image/jpeg', 0.86);
   state.photoAt = Date.now();
   $('shot').src = state.photo; $('shot').classList.remove('hidden');
   v.classList.add('hidden'); stopCamera();
